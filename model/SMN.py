@@ -100,6 +100,7 @@ class SMN(nn.Module):
         self.candidates_set_size = 14
         self.out_channels = 8
         self.fusion_method = "last"
+        self.k = 50
         # self.id2word = {}
         self.loss_fuc = nn.KLDivLoss()
         # for k, v in vocab.items():
@@ -179,10 +180,17 @@ class SMN(nn.Module):
         # M2 = M2.view(-1, self.candidates_set_size, self.max_seq_len, self.max_seq_len) # [batch_size * candidates_set_size, turn_num, seq_length, seq_length]
         M = M1.squeeze() + M2.squeeze()   #[batch_size, candidates_set_size, seq_length, seq_length]
         candidates_indices = candidates_indices.squeeze() #[batch_size, candidates_set_size, seq_length]
-        # print(M.shape, contexts_indices.shape, candidates_indices.shape)
+        
+        if candidates_indices.dim() == 2:
+            M = M.unsqueeze(0)
+            candidates_indices = candidates_indices.unsqueeze(0)
         M = torch.sum(M, dim=3)
-        mask = M.lt(0)
-        keep_words = candidates_indices.masked_fill(mask==True, 0) #pad_id
+        kvalue, _ = M.flatten().topk(self.k)
+        mask = M.gt(kvalue[-1])
+        pad_mask = candidates_indices.ne(0).ne(101).ne(102)
+        mask = mask * pad_mask
+        # keep_words = candidates_indices.masked_fill(mask==True, 0) #pad_id
+        keep_words = torch.masked_select(candidates_indices, mask)[:10]
         return keep_words
         # M = M.cpu().numpy().tolist()
         # contexts_indices = contexts_indices.cpu().numpy().tolist()

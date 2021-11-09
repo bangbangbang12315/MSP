@@ -41,14 +41,17 @@ class TestDataset(Dataset):
         return data
 
 class DialoDataset(Dataset):
-    def __init__(self, train_data_dir, valid_data_dir, train, vocab_path="pretrained/gpt2-chinese-cluecorpussmall/vocab.txt", max_length=512,max_candidate_num=14):
+    def __init__(self, train_data_dir=None, valid_data_dir=None, test_data_dir=None, train=False, vocab_path="pretrained/gpt2-chinese-cluecorpussmall/vocab.txt", max_length=512,max_candidate_num=14):
         self.tok = BertTokenizer(vocab_file=vocab_path, sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]")
         self.max_length = max_length
         self.max_candidate_num = max_candidate_num
         if train:
             self.data = self.load_data(train_data_dir)
         else:
-            self.data = self.load_data(valid_data_dir)
+            if valid_data_dir != None:
+                self.data = self.load_data(valid_data_dir)
+            else:
+                self.data = self.load_data(test_data_dir)
 
 
     def __len__(self):
@@ -86,8 +89,8 @@ class DialoDataset(Dataset):
         with open(data_dir, 'r') as fsrc:
             for sub in tqdm(fsrc, desc='Load Dataset'):
                 post, resp, pref, sref, tref = sub.strip().split('###')
-                sub_dict = {'post': self.tok.cls_token + ''.join(post.strip().split(' ')) + self.tok.sep_token,
-                            'resp': ''.join(resp.strip().split(' ')) + self.tok.sep_token,
+                sub_dict = {'post': ''.join(post.strip().split(' ')),
+                            'resp': ''.join(resp.strip().split(' ')),
                             'ref': pref.split('\t') + sref.split('\t') + tref.split('\t')}
                 while len(sub_dict['ref']) < self.max_candidate_num:
                     sub_dict['ref'].append(pad_ref)

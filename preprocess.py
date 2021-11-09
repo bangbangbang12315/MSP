@@ -13,19 +13,15 @@ import numpy as np
 import os
 
 def split_test(test_fp, test_ans, test_post, test_ref):
+    ## todo
     with open(test_fp, 'rb') as fp:
         data = fp.read().decode("utf-8")
-    test_data = data.split('\n\n')
+    test_data = data.split('\n')
     if test_ref != None:
         with open(test_post, 'w') as fsrc, open(test_ans, 'w') as ftgt, open(test_ref, 'w') as fref:
             for line in tqdm(test_data):
-                line_list = line.split('\n')
-                if len(line_list) >= 2:
-                    ref = line_list[:-2]
-                    line_list = line_list[-2:]
-                else:
-                    continue
-                post, resp = line_list[0], line_list[1]
+                line_list = line.split('###')
+                post, resp, pref, sref, oref = line_list[0], line_list[1], line_list[2], line_list[3], line_list[4]
                 reference = '\t'.join(ref)
                 fsrc.write(post+'\n')
                 ftgt.write(resp+'\n')
@@ -101,70 +97,7 @@ def create_logger(log_path):
     console.setFormatter(formatter)
     logger.addHandler(console)
 
-    return logger
-
-def getConstrativeDataset():
-    """
-    对原始语料进行tokenize，将每段对话处理成如下形式："[CLS]persona1[SEP]persona2[SEP]persona3[SEP]utterance1[SEP]utterance2[SEP]"
-    """
-    # 设置参数
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--vocab_path', default='vocab/vocab3.txt', type=str, required=False,
-                        help='词表路径')
-    parser.add_argument('--is_train', action='store_true', help='对训练集进行处理')
-    parser.add_argument('--log_path', default='data/preprocess.log', type=str, required=False, help='训练日志存放位置')
-    parser.add_argument('--train_path', default='../data/PersonaChatExtend/PersonaChatbyUsers/train', type=str, required=False, help='训练集存放位置')
-    parser.add_argument('--test_ans_path', default='', type=str, required=False, help='测试集回复存放位置')
-    parser.add_argument('--save_path', default='data/train.pkl', type=str, required=False, help='tokenize的训练数据集')
-    args = parser.parse_args()
-
-    # 初始化日志对象
-    logger = create_logger(args.log_path)
-    # 记录所有对话tokenize之后的长度，用于统计中位数与均值
-    dialogue_len = []  
-    dialogue_list = []
-    # 初始化tokenizer
-    tokenizer = BertTokenizerFast(vocab_file=args.vocab_path, sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]")
-    sep_id = tokenizer.sep_token_id
-    cls_id = tokenizer.cls_token_id
-    logger.info("preprocessing data,data path:{}, save path:{}".format(args.train_path, args.save_path))
-    cnt = 0
-    if args.test_ans_path is not None:
-        ftest = open(args.test_ans_path, 'w')
-    for user_file in tqdm(os.listdir(args.train_path), desc='Load User Data'):
-        # if cnt >= 100:
-        #     break
-        # cnt += 1
-        with open(os.path.join(args.train_path,user_file),'r') as fuser:
-            user_data = json.load(fuser)
-            personality = user_data['personality']
-            personality_ids = [cls_id]
-            for utterance in personality:
-                personality_ids += tokenizer.encode(utterance, add_special_tokens=False)
-                personality_ids += [sep_id]
-            for line in user_data['utterances']:
-                input_ids = personality_ids
-                # for h in line['history']: 
-                #     input_ids += tokenizer.encode(h, add_special_tokens=False)
-                #     input_ids += [sep_id]
-                input_ids += tokenizer.encode(line['history'][-1], add_special_tokens=False)
-                input_ids += [sep_id]
-                if args.is_train:
-                    input_ids += tokenizer.encode(line['candidates'][-1],add_special_tokens=False)
-                    input_ids += [sep_id]
-                else:
-                    ftest.write(line['candidates'][-1]+'\n')
-                if len(input_ids) > 1024:
-                    input_ids = personality_ids + input_ids[len(personality_ids)-1024:]
-                dialogue_len.append(len(input_ids))
-                dialogue_list.append(input_ids)
-    len_mean = np.mean(dialogue_len)
-    len_median = np.median(dialogue_len)
-    len_max = np.max(dialogue_len)
-    with open(args.save_path, "wb") as f:
-        pickle.dump(dialogue_list, f)
-    logger.info("finish preprocessing data,the result is stored in {}".format(args.save_path))
-    logger.info("mean of dialogue len:{},median of dialogue len:{},max len:{}".format(len_mean, len_median, len_max))                
+    return logger            
 
 def preprocess():
     """
@@ -229,16 +162,16 @@ def preprocess():
 
 
 if __name__ == '__main__':
-    post_fp = './ref/test/post.txt'
-    resp_fp = './ref/test/resp.txt'
-    refer_fp = './ref/test/refer.txt'
-    # train_fp = './ref/train.txt'
-    test_fp = './ref/test/test.txt'
-    merge_data(post_fp, resp_fp, None, test_fp, None)
+    # post_fp = './ref/test/post.txt'
+    # resp_fp = './ref/test/resp.txt'
+    # refer_fp = './ref/test/refer.txt'
+    # # train_fp = './ref/train.txt'
+    # test_fp = './ref/test/test.txt'
+    # merge_data(post_fp, resp_fp, None, test_fp, None)
 
-    test_fp = './ref/test/test.txt'
-    test_ans = './evaluate/ref/infer/test_ans.txt'
-    test_post = './evaluate/ref/infer/test_post.txt'
+    test_fp = './ref/Selected_Weibo/test/test.txt'
+    test_ans = './evaluate/Selected_Weibo/infer/test_ans.txt'
+    test_post = './evaluate/Selected_Weibo/infer/test_post.txt'
     test_ref = './evaluate/ref/infer/test_ref.txt'
     split_test(test_fp, test_ans, test_post, None)
 

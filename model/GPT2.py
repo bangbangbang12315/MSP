@@ -8,11 +8,12 @@ class GPT2(nn.Module):
         self.config = GPT2Config.from_json_file(config_path)
         self.model = GPT2LMHeadModel(config=self.config)
     
-    def forward(self, post, resp, ref=None):
+    def forward(self, post, resp=None, ref=None):
+        input_ids = post
+        if resp != None:
+            input_ids = torch.cat([input_ids, resp], dim=-1)
         if ref != None:
-            input_ids = torch.cat([post, resp, ref], dim=-1)
-        else:
-            input_ids = torch.cat([post, resp], dim=-1)
+            input_ids = torch.cat([input_ids, ref], dim=-1)
         # attention_mask = attention_mask
         r = self.model(
             input_ids=input_ids,

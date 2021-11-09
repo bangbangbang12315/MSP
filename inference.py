@@ -22,6 +22,7 @@ from transformers import (BertTokenizer, GPT2Config, GPT2LMHeadModel,
                           GPT2TokenizerFast)
 
 from model import MInterface
+from data import DInterface
 
 PAD = '[PAD]'
 pad_id = 0
@@ -38,23 +39,36 @@ def set_args():
     parser.add_argument('--topp', default=0, type=float, required=False, help='最高积累概率')
     # parser.add_argument('--model_config', default='config/model_config_dialogue_small.json', type=str, required=False,
     #                     help='模型参数')
-    parser.add_argument('--log_path', default='ref/interact.log', type=str, required=False, help='interact日志存放位置')
-    parser.add_argument('--vocab_path', default='pretrained/gpt2-chinese-cluecorpussmall/vocab.txt', type=str, required=False, help='选择词库')
-    parser.add_argument('--test_path', default='ref/test/test.pkl', type=str, required=False, help='选择测试集')
-    parser.add_argument('--inference_path', default='ref/inference.txt', type=str, required=False, help='生成样本地址')
-    parser.add_argument('--model_path', default='pretrained_model/CDial-GPT_LCCC-large', type=str, required=False, help='对话模型路径')
-    parser.add_argument('--model_name', default='gpt2', type=str)
+    parser.add_argument('--log_path', default='ref/Selected_Weibo/interact.log', type=str, required=False, help='interact日志存放位置')
+    parser.add_argument('--test_data_dir', default='ref/Selected_Weibo/test.txt', type=str, required=False, help='选择测试集')
+    parser.add_argument('--inference_path', default='ref/Selected_Weibo/inference.txt', type=str, required=False, help='生成样本地址')
     parser.add_argument('--loss', default='ce', type=str)
-    parser.add_argument('--lr', default=1e-3, type=float)
-    parser.add_argument('--pretrained', action='store_true')
     parser.add_argument('--save_samples_path', default="sample/", type=str, required=False, help="保存聊天记录的文件路径")
     parser.add_argument('--repetition_penalty', default=1.0, type=float, required=False,
                         help="重复惩罚参数，若生成的对话重复性较高，可适当提高该参数")
     parser.add_argument('--config_path', default='pretrained/gpt2-chinese-cluecorpussmall/config.json', type=str)
     # parser.add_argument('--seed', type=int, default=None, help='设置种子用于生成随机数，以使得训练的结果是确定的')
-    parser.add_argument('--max_len', type=int, default=512, help='每个utterance的最大长度,超过指定长度则进行截断')
+    parser.add_argument('--max_len', type=int, default=32, help='每个utterance的最大长度,超过指定长度则进行截断')
     parser.add_argument('--max_history_len', type=int, default=3, help="dialogue history的最大长度")
     parser.add_argument('--no_cuda', action='store_true', help='不使用GPU进行预测')
+
+    parser.add_argument('--dataset', default='dialo_dataset', type=str)
+    parser.add_argument('--vocab_path', default='pretrained/gpt2-chinese-cluecorpussmall/vocab.txt', type=str)
+    # parser.add_argument('--train_data_dir', default='ref/Selected_Weibo/train.txt', type=str)
+    # parser.add_argument('--valid_data_dir', default='ref/Selected_Weibo/dev.txt', type=str)
+    parser.add_argument('--model_name', default='SGNet', type=str)
+    parser.add_argument('--model_path', default=None, type=str)
+    parser.add_argument('--pretrained_generator_path', default='pretrained/gpt2-chinese-cluecorpussmall/', type=str)
+    parser.add_argument('--pretrained_selector_path', default='pretrained/smn/weibo.SMN.2021-10-06_10:21:55.pt', type=str)
+    parser.add_argument('--pretrained', action='store_true')
+    parser.add_argument('--weight_decay', default=1e-5, type=float)
+    parser.add_argument('--no_augment', action='store_true')
+    parser.add_argument('--batch_size', default=1, type=int)
+    
+    # Model Hyperparameters
+    parser.add_argument('--lr', default=1e-3, type=float)
+    parser.add_argument('--generator_config', default='pretrained/gpt2-chinese-cluecorpussmall/config.json', type=str)
+    parser.add_argument('--max_length', default=512, type=int)
     return parser.parse_args()
 
 
@@ -130,8 +144,9 @@ def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     tokenizer = BertTokenizer(vocab_file=args.vocab_path)
     # model = GPT2LMHeadModel()
-    model = MInterface(**vars(args))
-    model = model.load_from_checkpoint(checkpoint_path=args.model_path)
+    model_module = MInterface(**vars(args))
+    model_module = model_module.load_from_checkpoint(checkpoint_path=args.model_path)
+    model = model_module.model
     if args.save_samples_path:
         if not os.path.exists(args.save_samples_path):
             os.makedirs(args.save_samples_path)
@@ -140,15 +155,22 @@ def main():
         # 存储聊天记录，每个utterance以token的id的形式进行存储
     history = []
     cnt = 0
-    with open(args.test_path, "rb") as fsrc, open(args.inference_path, 'w') as ftgt:
-        test_input_list = pickle.load(fsrc)
+    data_module = DInterface(**vars(args))
+    data_module.setup('test')
+    test_dataloader = data_module.test_dataloader()
+    with open(args.inference_path, 'w') as ftgt:
         with torch.no_grad():
-            for batch_idx, input_ids in enumerate(test_input_list):
-                input_ids = torch.tensor(input_ids).unsqueeze(0).to(device)
-                post = ''.join(tokenizer.convert_ids_to_tokens(input_ids.squeeze()))
+            for batch_idx, input_ids in enumerate(test_dataloader):
+                post, resp, ref = input_ids["post"], input_ids["resp"], input_ids["ref"]
+                # input_ids = torch.tensor(input_ids).unsqueeze(0).to(device)
+                poststr = ''.join(tokenizer.convert_ids_to_tokens(post.squeeze()))
                 generated = []
+                ref_keep = model.selector.extract_M(post, ref).detach() #[batch_size, turn_num, context_len]
+                ref_keep = ref_keep.view(post.size(0), -1)
+                ref_str = ''.join(tokenizer.convert_ids_to_tokens(ref_keep.squeeze()))
+                print(poststr, ref_str)
                 for _ in range(args.max_len):
-                    outputs = model.forward(input_ids, attention_mask=None)
+                    outputs = model.generator(post, None, ref_keep)
                     logits = outputs.logits
                     next_token_logits = logits[0][-1, :]
                     
@@ -164,12 +186,12 @@ def main():
                     if next_token == tokenizer.sep_token_id:  # 遇到[SEP]则表明response生成结束
                         break
                     generated.append(next_token.item())
-                    input_ids = torch.cat((input_ids, next_token.unsqueeze(0)), dim=1)
+                    post = torch.cat((post, next_token.unsqueeze(0)), dim=1)
                 text = ''.join(tokenizer.convert_ids_to_tokens(generated))
                 ftgt.write(text + '\n')
                 if cnt < 100:
                     cnt += 1
-                    print('Post: ', post)
+                    print('Post: ', poststr)
                     print('Response: ', text)
 
 if __name__ == '__main__':
