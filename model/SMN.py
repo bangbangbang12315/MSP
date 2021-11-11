@@ -101,6 +101,8 @@ class SMN(nn.Module):
         self.out_channels = 8
         self.fusion_method = "last"
         self.k = 50
+        self.keep_ref_num = 10
+        self.pad_token_id = 0
         # self.id2word = {}
         self.loss_fuc = nn.KLDivLoss()
         # for k, v in vocab.items():
@@ -142,7 +144,7 @@ class SMN(nn.Module):
             candidates_indices: [batch_size, candidates_set_size, seq_length]
             M: [batch_size * candidates_set_size, turn_num, seq_length, seq_length]
         '''
-        # batch_size = contexts_indices.size(0)
+        batch_size = contexts_indices.size(0)
         contexts_indices = contexts_indices.unsqueeze(1)
         # print(contexts_indices.shape)
         contexts_seq_len = (contexts_indices != 0).sum(dim=-1).long() # [batch_size, turn_num]
@@ -185,12 +187,25 @@ class SMN(nn.Module):
             M = M.unsqueeze(0)
             candidates_indices = candidates_indices.unsqueeze(0)
         M = torch.sum(M, dim=3)
-        kvalue, _ = M.flatten().topk(self.k)
-        mask = M.gt(kvalue[-1])
-        pad_mask = candidates_indices.ne(0).ne(101).ne(102)
-        mask = mask * pad_mask
+        M = M.view(batch_size, -1)
+        candidates_indices = candidates_indices.view(batch_size, -1)
+        kvalue, _ = M.topk(self.k)
+        mask = M.gt(kvalue[:,-1].unsqueeze(1))
+        pad_mask = candidates_indices.ne(0)
+        cls_mask = candidates_indices.ne(101)
+        eos_mask = candidates_indices.ne(102)
+        mask = mask * pad_mask * cls_mask * eos_mask
         # keep_words = candidates_indices.masked_fill(mask==True, 0) #pad_id
-        keep_words = torch.masked_select(candidates_indices, mask)[:10]
+        # keep_words = candidates_indices.masked_scatter(mask) #pad_id
+        for idx in range(batch_size):
+            keep_word = torch.masked_select(candidates_indices[idx,:], mask[idx,:])[:self.keep_ref_num]
+            if keep_word.size(0) < self.keep_ref_num:
+                keep_word = torch.cat((torch.zeros(self.keep_ref_num-keep_word.size(0)).type_as(keep_word), keep_word), dim=-1)
+            keep_word = keep_word.unsqueeze(0)
+            if idx == 0:
+                keep_words = keep_word
+            else:
+                keep_words = torch.cat((keep_words,keep_word), dim=0)
         return keep_words
         # M = M.cpu().numpy().tolist()
         # contexts_indices = contexts_indices.cpu().numpy().tolist()

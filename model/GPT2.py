@@ -16,7 +16,7 @@ class GPT2(nn.Module):
             labels = input_ids
         if ref != None:
             input_ids = torch.cat([ref, input_ids], dim=-1)
-            labels = torch.cat([torch.Tensor(ref.shape)*(-100).type_as(ref), labels], dim=-1)
+            labels = torch.cat([torch.ones(ref.shape).type_as(ref)*-100, labels], dim=-1)
         labels = torch.where(labels == 0, -100, labels)
         # attention_mask = attention_mask
         r = self.model(
