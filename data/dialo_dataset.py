@@ -78,6 +78,7 @@ class DialoDataset(Dataset):
                                         padding="max_length",
                                         return_tensors="pt"))
                 tokenized_line[k] = torch.cat(tokenized_line[k],dim=0)
+        
         return tokenized_line
     
     def load_data(self, data_dir):

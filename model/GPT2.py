@@ -10,14 +10,18 @@ class GPT2(nn.Module):
     
     def forward(self, post, resp=None, ref=None):
         input_ids = post
+        labels = input_ids
         if resp != None:
             input_ids = torch.cat([input_ids, resp], dim=-1)
+            labels = input_ids
         if ref != None:
-            input_ids = torch.cat([input_ids, ref], dim=-1)
+            input_ids = torch.cat([ref, input_ids], dim=-1)
+            labels = torch.cat([torch.Tensor(ref.shape)*(-100).type_as(ref), labels], dim=-1)
+        labels = torch.where(labels == 0, -100, labels)
         # attention_mask = attention_mask
         r = self.model(
             input_ids=input_ids,
-            labels=input_ids,
+            labels=labels,
             return_dict=True,
         )
         return r
