@@ -17,14 +17,14 @@ class MInterface(pl.LightningModule):
         self.configure_loss()
         self.candidate_num = 14
 
-    def forward(self, post, resp, ref=None, pseudo_label=None, opt_idx = 0):
+    def forward(self, post, input_ids=None, ref=None, pseudo_label=None, opt_idx = 0):
         '''
         opt_idx: 0 : extract reference, 1: get generator outputs, 2: get selector outputs 
         '''
         if opt_idx == 0:
             return self.model.selector.extract_M(post, ref)
         if opt_idx == 1:
-            return self.model.generator(post, resp, ref)
+            return self.model.generator(input_ids, ref)
         if opt_idx == 2:
             return self.model.selector(post, ref, pseudo_label)
 
@@ -36,29 +36,28 @@ class MInterface(pl.LightningModule):
     #     return loss
     def training_step(self, batch, batch_idx, optimizer_idx):
         #train generator
-        post, resp, ref = batch["post"], batch["resp"], batch["ref"]
+        post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
         if optimizer_idx == 0:
             ref_keep = self(post, None, ref, None, 0).detach() #[batch_size, turn_num, context_len]
             ref_keep = ref_keep.view(post.size(0), -1)
-            outputs = self(post, resp, ref_keep, None, 1)
+            outputs = self(None, input_ids, ref_keep, None, 1)
             loss = outputs.loss
             self.log('g_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
             return loss
         #train selector
         if optimizer_idx == 1:
-            outputs = self(post, resp, None, None, 1)
+            outputs = self(None, input_ids, None, None, 1)
             logits = outputs.logits.detach()
-            pseudo_label = self.get_pseudo_label(logits, post, resp, ref)
+            pseudo_label = self.get_pseudo_label(logits, input_ids, ref)
             loss  = self(post, None, ref, pseudo_label, 2)
             self.log('s_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
             return loss
     
-    def get_pseudo_label(self, logits, post, resp, ref):
+    def get_pseudo_label(self, logits, input_ids, ref):
         batch_size, max_len, vocab_size = logits.shape
         # resp_one_hot = torch.zeros(batch_size*max_len, vocab_size).scatter_(1, resp.view(batch_size*max_len, -1), 1)
         # ref_one_hot = torch.zeros(batch_size*self.candidate_num*max_len, vocab_size).scatter_(1, ref.view(batch_size*self.candidate_num*max_len, -1), 1)
-        resp = torch.cat([post, resp], dim=-1)
-        resp_one_hot = torch.nn.functional.one_hot(resp.view(-1), num_classes=vocab_size)
+        resp_one_hot = torch.nn.functional.one_hot(input_ids.view(-1), num_classes=vocab_size)
         ref_one_hot = torch.nn.functional.one_hot(ref.view(-1), num_classes=vocab_size)
         sub_info = resp_one_hot.view(batch_size, max_len, -1) - logits
         ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, max_len // 2, -1).float()
@@ -68,13 +67,13 @@ class MInterface(pl.LightningModule):
         return select_score
 
     def validation_step(self, batch, batch_idx):
-        post, resp, ref = batch["post"], batch["resp"], batch["ref"]
+        post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
         # print(post, resp, ref)
         ref_keep = self(post, None, ref, None, 0) #[batch_size, turn_num, context_len]
         ref_keep = ref_keep.view(post.size(0), -1)
-        outputs = self(post, resp, ref_keep, None, 1)
+        outputs = self(None, input_ids, ref_keep, None, 1)
         loss = outputs.loss
-        # logits = outputs.logits
+        logits = outputs.logits
         # n_correct, n_word = self.calculate_acc(logits, resp, ignore_index=0)
 
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
@@ -96,8 +95,8 @@ class MInterface(pl.LightningModule):
             weight_decay = self.hparams.weight_decay
         else:
             weight_decay = 0
-        optimizer_d = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
-        optimizer_g = AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
+        optimizer_d = torch.optim.Adam(self.model.selector.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
+        optimizer_g = AdamW(self.model.generator.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
         if self.hparams.lr_scheduler is None:
             return [optimizer_g, optimizer_d], []
         else:
@@ -106,7 +105,7 @@ class MInterface(pl.LightningModule):
                                     gamma=self.hparams.lr_decay_rate)
             t_total = 100000
             scheduler_g = get_linear_schedule_with_warmup(optimizer_g, self.hparams.warm_up_steps, t_total)
-            scheduler = {"scheduler": scheduler_g, "interval": "step", "frequency": 1}
+            # scheduler = {"scheduler": scheduler_g, "interval": "step", "frequency": 1}
             return [optimizer_g, optimizer_d], [scheduler_g, scheduler_d]
     # def configure_optimizers(self):
     #     if hasattr(self.hparams, 'weight_decay'):

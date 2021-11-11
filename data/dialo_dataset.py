@@ -62,9 +62,13 @@ class DialoDataset(Dataset):
         tokenized_line = defaultdict(list)
         for k, v in line.items():
             if k != 'ref':
+                if k == 'input_ids':
+                    max_len = self.max_length // 8
+                else:
+                    max_len = self.max_length // 16
                 tokenized_line[k] = self.tok.encode(
                                         v,
-                                        max_length=self.max_length // 16,
+                                        max_length=max_len,
                                         truncation=True,
                                         padding="max_length",
                                         return_tensors="pt"
@@ -92,6 +96,7 @@ class DialoDataset(Dataset):
                 post, resp, pref, sref, tref = sub.strip().split('###')
                 sub_dict = {'post': ''.join(post.strip().split(' ')),
                             'resp': ''.join(resp.strip().split(' ')),
+                            'input_ids': ''.join(post.strip().split(' ')) + '[SEP]' + ''.join(resp.strip().split(' ')),
                             'ref': pref.split('\t') + sref.split('\t') + tref.split('\t')}
                 while len(sub_dict['ref']) < self.max_candidate_num:
                     sub_dict['ref'].append(pad_ref)

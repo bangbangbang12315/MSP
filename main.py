@@ -23,7 +23,7 @@ def load_callbacks():
 
     callbacks.append(plc.ModelCheckpoint(
         monitor='val_loss',
-        filename='best-{epoch:02d}-{val_acc:.3f}',
+        filename='best-{epoch:02d}-{val_loss:.3f}',
         save_top_k=1,
         mode='min',
         save_last=True
@@ -60,11 +60,11 @@ if __name__ == '__main__':
     # Basic Training Control
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--num_workers', default=8, type=int)
-    parser.add_argument('--gpus', default='0,1', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
+    parser.add_argument('--gpus', default='0', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
     parser.add_argument('--seed', default=1234, type=int)
     parser.add_argument('--min_epochs', default=5, type=int)
     parser.add_argument('--max_epochs', default=100, type=int)
-    parser.add_argument('--val_check_interval', default=10000, type=int)
+    parser.add_argument('--val_check_interval', default=1000, type=int)
     parser.add_argument('--default_root_dir', default='checkpoints', type=str)
     parser.add_argument('--lr', default=1e-3, type=float)
     parser.add_argument('--distributed_backend', default='dp', type=str)

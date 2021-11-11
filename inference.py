@@ -170,7 +170,7 @@ def main():
                 ref_str = ''.join(tokenizer.convert_ids_to_tokens(ref_keep.squeeze()))
                 print(poststr, ref_str)
                 for _ in range(args.max_len):
-                    outputs = model.generator(post, None, ref_keep)
+                    outputs = model.generator(post, ref_keep)
                     logits = outputs.logits
                     next_token_logits = logits[0][-1, :]
                     

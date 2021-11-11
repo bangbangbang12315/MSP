@@ -207,27 +207,6 @@ class SMN(nn.Module):
             else:
                 keep_words = torch.cat((keep_words,keep_word), dim=0)
         return keep_words
-        # M = M.cpu().numpy().tolist()
-        # contexts_indices = contexts_indices.cpu().numpy().tolist()
-        # candidates_indices = candidates_indices.cpu().numpy().tolist()
-        # keep_words = []
-        # other_words = []
-        # for context, scores in zip(contexts_indices[1:], M):
-        #     # keep_word = []
-        #     # other_word = []
-        #     context_word = ''.join(list(map(lambda x: self.id2word[x], context))).replace('<PAD>', '')
-
-
-            # for word, score in zip(context, scores):
-            #     if score > 0:
-            #         if word != 0:
-            #             keep_word.append(self.id2word[word])
-            #     else:
-            #         if word != 0:
-            #             other_word.append(self.id2word[word])
-            # keep_words.append(' '.join(keep_word))
-        
-        # print('keep_word:{}, other_word: {}, context: {}, post: {}, resp: {}'.format(' '.join(keep_word), ' '.join(other_word), context_word, post, resp))
 
     def forward(self, contexts_indices, candidates_indices, y_dev):
         # contexts_indices: [batch_size, turn_num, seq_length] post
@@ -265,10 +244,7 @@ class SMN(nn.Module):
         contexts_hiddens = torch.einsum("btij, jk -> btik", contexts_hiddens, self.A)
         # print(contexts_hiddens.shape, candidates_hiddens.shape)
         M2 = torch.einsum("btph, bcqh -> btcpq", contexts_hiddens, candidates_hiddens) # [batch_size, turn_num, candidates_set_size, seq_length, seq_length]
-        # M2 = M2.permute(0, 2, 1, 3, 4).contiguous() # [batch_size, candidates_set_size, turn_num, seq_length, seq_length]
-        # M2 = M2.view(-1, self.candidates_set_size, self.max_seq_len, self.max_seq_len) # [batch_size * candidates_set_size, turn_num, seq_length, seq_length]
-        # self.extract_M(M1, contexts_indices, candidates_indices)
-        # self.extract_M(M2, contexts_indices, candidates_indices)
+
         M = [M1, M2]
         M = torch.stack(M, dim=2).contiguous() # [batch_size * candidates_set_size, turn_num, 2, seq_length, seq_length]
         M = M.view(-1, 2, self.max_seq_len, self.max_seq_len) # [batch_size * candidates_set_size * turn_num, 2, seq_length, seq_length]
@@ -281,21 +257,12 @@ class SMN(nn.Module):
         size_0 = M.size(0)
         M = M.view(size_0, self.candidates_set_size, -1) # [batch_size * turn_num, candidates_set_size, out_channels *16 * 16]
 
-        # contexts_turns_num_extend = [copy.deepcopy(contexts_turns_num) for _ in range(self.candidates_set_size)]
-        # contexts_turns_num_extend = torch.stack(contexts_turns_num_extend, dim=1) # [batch_size, candidates_set_size]
-        # contexts_turns_num_extend = contexts_turns_num_extend.view(-1) # [batch_size * candidates_set_size]
         H,_ = self.gru2(M) # [batch_size * turn_num, candidates_set_size , hidden_size]
-        # if self.fusion_method != "dynamic":
-        #     F = self.feature_fusion(H, contexts_turns_num_extend).contiguous() # [batch_size * candidates_set_size, hidden_size]
-        # else:
-        #     F = self.feature_fusion(H, contexts_turns_num_extend, att_status = contexts_hiddens).contiguous()
 
         flatten = H.contiguous().view(batch_size, -1) #[batch_size, candidates_set_size*hidden_size]
         logits = self.classifier(flatten)
         logits = logits.log()
         loss = self.loss_fuc(logits, y_dev)
-
-        # probs = torch.nn.functional.sigmoid(logits)
 
         return loss
 
