@@ -2,9 +2,6 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-torch.manual_seed(1024)
-torch.cuda.manual_seed(1024)
-
 class GRUModel(nn.Module):
     def __init__(self, in_dim, out_dim, num_layers=1, batch_first=True, directions=1, dropout=0.0):
         super(GRUModel, self).__init__()
@@ -87,8 +84,6 @@ class FeatureFusion(nn.Module):
         else:
             raise ValueError(f"Feature-fusion method {self.method} not supported")
 
-
-
 class SMN(nn.Module):
     def __init__(self, word_embeddings=None):
         super(SMN, self).__init__()
@@ -104,7 +99,8 @@ class SMN(nn.Module):
         self.keep_ref_num = 10
         self.pad_token_id = 0
         # self.id2word = {}
-        self.loss_fuc = nn.KLDivLoss()
+        # self.loss_fuc = nn.KLDivLoss()
+        self.loss_fuc = nn.NLLLoss()
         # for k, v in vocab.items():
         #     self.id2word[v] = k
         # self.device = torch.device('cuda:0,1')
@@ -260,6 +256,7 @@ class SMN(nn.Module):
         H,_ = self.gru2(M) # [batch_size * turn_num, candidates_set_size , hidden_size]
 
         flatten = H.contiguous().view(batch_size, -1) #[batch_size, candidates_set_size*hidden_size]
+        # flatten = torch.sum(candidates_embed, dim=2).contiguous().view(batch_size, -1)
         logits = self.classifier(flatten)
         logits = logits.log()
         loss = self.loss_fuc(logits, y_dev)

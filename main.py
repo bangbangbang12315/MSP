@@ -8,7 +8,7 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from data import DInterface
-from model import MInterface
+from model import MInterface, SInterface
 from utils import load_model_path_by_args
 
 
@@ -41,9 +41,9 @@ def main(args):
     data_module = DInterface(**vars(args))
 
     if load_path is None:
-        model = MInterface(**vars(args))
+        model = SInterface(**vars(args))
     else:
-        model = MInterface(**vars(args))
+        model = SInterface(**vars(args))
         args.resume_from_checkpoint = load_path
 
     # # If you want to change the logger's saving folder
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     # Basic Training Control
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--num_workers', default=8, type=int)
-    parser.add_argument('--gpus', default='0', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
+    parser.add_argument('--gpus', default='1', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
     parser.add_argument('--seed', default=1234, type=int)
     parser.add_argument('--min_epochs', default=5, type=int)
     parser.add_argument('--max_epochs', default=100, type=int)
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr_decay_rate', default=0.5, type=float)
     parser.add_argument('--lr_decay_min_lr', default=1e-5, type=float)
     parser.add_argument('--warm_up_steps', default=4000, type=int, required=False, help="warm up步数")
-    parser.add_argument('--gradient_clip_val', default=1.0, type=float)
+    parser.add_argument('--gradient_clip_val', default=0.5, type=float)
 
     # Restart Control
     parser.add_argument('--load_best', action='store_true')

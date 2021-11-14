@@ -17,7 +17,7 @@ class MInterface(pl.LightningModule):
         self.configure_loss()
         self.candidate_num = 14
 
-    def forward(self, post, input_ids=None, ref=None, pseudo_label=None, opt_idx = 0):
+    def forward(self, post, input_ids=None, ref=None, label=None, pseudo=False, opt_idx = 0):
         '''
         opt_idx: 0 : extract reference, 1: get generator outputs, 2: get selector outputs 
         '''
@@ -26,14 +26,8 @@ class MInterface(pl.LightningModule):
         if opt_idx == 1:
             return self.model.generator(input_ids, ref)
         if opt_idx == 2:
-            return self.model.selector(post, ref, pseudo_label)
+            return self.model.selector(post, ref, label, pseudo)
 
-    # def training_step(self, batch, batch_idx):
-    #     inputs, attention_mask = batch["input_ids"], batch["attention_mask"]
-    #     outputs = self(inputs, attention_mask)
-    #     loss = outputs.loss
-    #     self.log('loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-    #     return loss
     def training_step(self, batch, batch_idx, optimizer_idx):
         #train generator
         post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
@@ -46,32 +40,49 @@ class MInterface(pl.LightningModule):
             return loss
         #train selector
         if optimizer_idx == 1:
-            outputs = self(None, input_ids, None, None, 1)
+            outputs = self(None, input_ids, None, None, False, 1)
             logits = outputs.logits.detach()
-            pseudo_label = self.get_pseudo_label(logits, input_ids, ref)
-            loss  = self(post, None, ref, pseudo_label, 2)
+            if random.random() < 0.7:
+                ref = torch.cat((resp.unsqueeze(1), ref[:,:-1,:]),dim=1)
+                for batch_idx in range(ref.size(0)):
+                    idx =  torch.randperm(ref[batch_idx, :, :].shape[0])
+                    label = (idx==0).nonzero()[0]
+                    cur_ref = ref[batch_idx,idx,:].unsqueeze(0)
+                    if batch_idx == 0:
+                        labels = label
+                        new_ref = cur_ref
+                    else:
+                        labels = torch.cat((labels, label), dim=0)
+                        new_ref = torch.cat((new_ref, cur_ref), dim=0)
+                loss = self(post, None, new_ref, labels, False, 2)
+            else:
+                pseudo_label = self.get_pseudo_label(logits, input_ids, ref).type_as(ref)
+                loss = self(post, None, ref, pseudo_label, True, 2) 
             self.log('s_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
             return loss
     
-    def get_pseudo_label(self, logits, input_ids, ref):
-        batch_size, max_len, vocab_size = logits.shape
+    def get_pseudo_label(self, resp, ref):
+        batch_size, max_len = resp.shape
+        vocab_size = 21128
         # resp_one_hot = torch.zeros(batch_size*max_len, vocab_size).scatter_(1, resp.view(batch_size*max_len, -1), 1)
         # ref_one_hot = torch.zeros(batch_size*self.candidate_num*max_len, vocab_size).scatter_(1, ref.view(batch_size*self.candidate_num*max_len, -1), 1)
-        resp_one_hot = torch.nn.functional.one_hot(input_ids.view(-1), num_classes=vocab_size)
+        resp_one_hot = torch.nn.functional.one_hot(resp.view(-1), num_classes=vocab_size)
         ref_one_hot = torch.nn.functional.one_hot(ref.view(-1), num_classes=vocab_size)
-        sub_info = resp_one_hot.view(batch_size, max_len, -1) - logits
-        ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, max_len // 2, -1).float()
-        select_score = torch.einsum('bmv, bclv -> bc', sub_info, ref_one_hot)
+        sub_info = resp_one_hot.view(batch_size, max_len, -1).float()
+        ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, max_len, -1).float()
+        select_score = torch.einsum('bclv, bmv -> bclm', ref_one_hot, sub_info)
+        select_score = torch.sum(torch.max(select_score, dim=-1)[0], dim=-1)
         select_score = F.softmax(select_score)
         # pseudo_logits, pseudo_label = select_score.topk(3, dim=1)
+
         return select_score
 
     def validation_step(self, batch, batch_idx):
         post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
         # print(post, resp, ref)
-        ref_keep = self(post, None, ref, None, 0) #[batch_size, turn_num, context_len]
+        ref_keep = self(post, None, ref, None, False, 0) #[batch_size, turn_num, context_len]
         ref_keep = ref_keep.view(post.size(0), -1)
-        outputs = self(None, input_ids, ref_keep, None, 1)
+        outputs = self(None, input_ids, ref_keep, None, False, 1)
         loss = outputs.loss
         logits = outputs.logits
         # n_correct, n_word = self.calculate_acc(logits, resp, ignore_index=0)
@@ -107,33 +118,6 @@ class MInterface(pl.LightningModule):
             scheduler_g = get_linear_schedule_with_warmup(optimizer_g, self.hparams.warm_up_steps, t_total)
             # scheduler = {"scheduler": scheduler_g, "interval": "step", "frequency": 1}
             return [optimizer_g, optimizer_d], [scheduler_g, scheduler_d]
-    # def configure_optimizers(self):
-    #     if hasattr(self.hparams, 'weight_decay'):
-    #         weight_decay = self.hparams.weight_decay
-    #     else:
-    #         weight_decay = 0
-    #     if self.hparams.optimizer == 'Adam':
-    #         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
-    #     elif self.hparams.optimizer == 'AdamW':
-    #         optimizer = AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
-    #     if self.hparams.lr_scheduler is None:
-    #         return optimizer
-    #     else:
-    #         if self.hparams.lr_scheduler == 'step':
-    #             scheduler = lrs.StepLR(optimizer,
-    #                                    step_size=self.hparams.lr_decay_steps,
-    #                                    gamma=self.hparams.lr_decay_rate)
-    #         elif self.hparams.lr_scheduler == 'cosine':
-    #             scheduler = lrs.CosineAnnealingLR(optimizer,
-    #                                               T_max=self.hparams.lr_decay_steps,
-    #                                               eta_min=self.hparams.lr_decay_min_lr)
-    #         elif self.hparams.lr_scheduler == 'warmup':
-    #             t_total = 100000
-    #             scheduler = get_linear_schedule_with_warmup(optimizer, self.hparams.warm_up_steps, t_total)
-    #             scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
-    #         else:
-    #             raise ValueError('Invalid lr_scheduler type!')
-    #         return [optimizer], [scheduler]
 
     def configure_loss(self):
         loss = self.hparams.loss.lower()
@@ -193,16 +177,6 @@ class MInterface(pl.LightningModule):
 
     def load_model(self):
         name = self.hparams.model_name
-        # Change the `snake_case.py` file name to `CamelCase` class name.
-        # Please always name your model file name as `snake_case.py` and
-        # class name corresponding `CamelCase`.
-        # camel_name = ''.join([i.capitalize() for i in name.split('_')])
-        # try:
-        #     Model = getattr(importlib.import_module(
-        #         '.'+name, package=__package__), camel_name)
-        # except:
-        #     raise ValueError(
-        #         f'Invalid Module File Name or Invalid Class Name {name}.{camel_name}!')
         Model = getattr(importlib.import_module(
                 '.'+name, package=__package__), name)
         self.model = self.instancialize(Model)
