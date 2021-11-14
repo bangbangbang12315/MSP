@@ -41,9 +41,9 @@ def main(args):
     data_module = DInterface(**vars(args))
 
     if load_path is None:
-        model = SInterface(**vars(args))
+        model = MInterface(**vars(args))
     else:
-        model = SInterface(**vars(args))
+        model = MInterface(**vars(args))
         args.resume_from_checkpoint = load_path
 
     # # If you want to change the logger's saving folder
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     # Basic Training Control
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--num_workers', default=8, type=int)
-    parser.add_argument('--gpus', default='1', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
+    parser.add_argument('--gpus', default='0,1', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
     parser.add_argument('--seed', default=1234, type=int)
     parser.add_argument('--min_epochs', default=5, type=int)
     parser.add_argument('--max_epochs', default=100, type=int)

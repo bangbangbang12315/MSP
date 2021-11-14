@@ -3,6 +3,7 @@ import inspect
 
 import pytorch_lightning as pl
 import torch
+import random
 import torch.optim.lr_scheduler as lrs
 from torch.nn import functional as F
 from torch.nn.modules import loss
@@ -17,7 +18,7 @@ class MInterface(pl.LightningModule):
         self.configure_loss()
         self.candidate_num = 14
 
-    def forward(self, post, input_ids=None, ref=None, label=None, pseudo=False, opt_idx = 0):
+    def forward(self, post, input_ids=None, ref=None, label=None, pseudo=False, opt_idx=0):
         '''
         opt_idx: 0 : extract reference, 1: get generator outputs, 2: get selector outputs 
         '''
@@ -32,9 +33,9 @@ class MInterface(pl.LightningModule):
         #train generator
         post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
         if optimizer_idx == 0:
-            ref_keep = self(post, None, ref, None, 0).detach() #[batch_size, turn_num, context_len]
+            ref_keep = self(post, None, ref, None, False, 0).detach() #[batch_size, turn_num, context_len]
             ref_keep = ref_keep.view(post.size(0), -1)
-            outputs = self(None, input_ids, ref_keep, None, 1)
+            outputs = self(None, input_ids, ref_keep, None, False, 1)
             loss = outputs.loss
             self.log('g_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
             return loss
@@ -54,22 +55,23 @@ class MInterface(pl.LightningModule):
                     else:
                         labels = torch.cat((labels, label), dim=0)
                         new_ref = torch.cat((new_ref, cur_ref), dim=0)
+                labels = labels.type_as(ref)
                 loss = self(post, None, new_ref, labels, False, 2)
             else:
-                pseudo_label = self.get_pseudo_label(logits, input_ids, ref).type_as(ref)
+                pseudo_label = self.get_pseudo_label(logits, input_ids, ref)
                 loss = self(post, None, ref, pseudo_label, True, 2) 
             self.log('s_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
             return loss
     
-    def get_pseudo_label(self, resp, ref):
+    def get_pseudo_label(self, logits, resp, ref):
         batch_size, max_len = resp.shape
         vocab_size = 21128
         # resp_one_hot = torch.zeros(batch_size*max_len, vocab_size).scatter_(1, resp.view(batch_size*max_len, -1), 1)
         # ref_one_hot = torch.zeros(batch_size*self.candidate_num*max_len, vocab_size).scatter_(1, ref.view(batch_size*self.candidate_num*max_len, -1), 1)
         resp_one_hot = torch.nn.functional.one_hot(resp.view(-1), num_classes=vocab_size)
         ref_one_hot = torch.nn.functional.one_hot(ref.view(-1), num_classes=vocab_size)
-        sub_info = resp_one_hot.view(batch_size, max_len, -1).float()
-        ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, max_len, -1).float()
+        sub_info = resp_one_hot.view(batch_size, max_len, -1).float() - logits
+        ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, max_len // 2, -1).float()
         select_score = torch.einsum('bclv, bmv -> bclm', ref_one_hot, sub_info)
         select_score = torch.sum(torch.max(select_score, dim=-1)[0], dim=-1)
         select_score = F.softmax(select_score)
@@ -182,7 +184,7 @@ class MInterface(pl.LightningModule):
         self.model = self.instancialize(Model)
         if self.hparams.pretrained:
             self.model.generator.load_weight(self.hparams.pretrained_generator_path)
-            # self.model.selector.load_weight(self.hparams.pretrained_selector_path)
+            self.model.selector.load_weight(self.hparams.pretrained_selector_path)
 
     def instancialize(self, Model, **other_args):
         """ Instancialize a model using the corresponding parameters

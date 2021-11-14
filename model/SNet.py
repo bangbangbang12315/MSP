@@ -158,8 +158,8 @@ class SNet(nn.Module):
             refs: [batch_size, candidates_set_size, seq_length]
             M: [batch_size * candidates_set_size, turn_num, seq_length, seq_length]
         '''
-        batch_size = contexts_indices.size(0)
-        contexts_indices = contexts_indices.unsqueeze(1)
+        batch_size = post.size(0)
+        contexts_indices = post.unsqueeze(1)
 
         post_embedd = self.embedding(post)
         refs_embedd = self.embedding(refs)
@@ -173,9 +173,9 @@ class SNet(nn.Module):
 
         post = self.atten_layer_norm(post_embedd)
         att = self.cross_attention(post, refs_embedd, refs_embedd, refs_mask, True) #[b, t, l, s]
-        att = torch.sum(att, dim=2)
+        att = torch.max(att, dim=2)[0]
 
-        att = att.view(batch_size, -1)
+        att = att.view(batch_size, -1) #[b, t * s]
         candidates_indices = refs.view(batch_size, -1)
         kvalue, _ = att.topk(self.k)
         mask = att.gt(kvalue[:,-1].unsqueeze(1))
@@ -197,5 +197,10 @@ class SNet(nn.Module):
         return keep_words
 
     def load_weight(self, path):
-        self.load_state_dict(state_dict=torch.load(path))
+        state_dict = torch.load(path)['state_dict']
+        new_state_dict = {}
+        for key, value in state_dict.items():
+            key = key[6:]
+            new_state_dict[key] = value
+        self.load_state_dict(new_state_dict)
         if torch.cuda.is_available(): self.cuda()
