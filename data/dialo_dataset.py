@@ -45,7 +45,11 @@ class DialoDataset(Dataset):
         self.tok = BertTokenizer(vocab_file=vocab_path, sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]")
         self.max_length = max_length
         self.max_candidate_num = max_candidate_num
-        if train:
+        self.train = train
+        self.train_data_dir = train_data_dir
+        self.valid_data_dir = valid_data_dir
+        self.test_data_dir = test_data_dir
+        if self.train:
             self.data = self.load_data(train_data_dir)
         else:
             if valid_data_dir != None:
@@ -63,14 +67,13 @@ class DialoDataset(Dataset):
         for k, v in line.items():
             if k != 'ref':
                 if k == 'input_ids':
-                    max_len = self.max_length // 8
+                    max_len = self.max_length
                 else:
-                    max_len = self.max_length // 16
+                    max_len = self.max_length // 2
                 tokenized_line[k] = self.tok.encode(
                                         v,
                                         max_length=max_len,
                                         truncation=True,
-                                        padding="max_length",
                                         return_tensors="pt"
                                     ).squeeze()
             else:

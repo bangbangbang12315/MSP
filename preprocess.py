@@ -22,7 +22,7 @@ def split_test(test_fp, test_ans, test_post, test_ref):
             for line in tqdm(test_data):
                 line_list = line.split('###')
                 post, resp, pref, sref, oref = line_list[0], line_list[1], line_list[2], line_list[3], line_list[4]
-                reference = '\t'.join(ref)
+                reference = pref + '###' + sref + '###' + oref
                 fsrc.write(post+'\n')
                 ftgt.write(resp+'\n')
                 fref.write(reference+'\n')
@@ -169,12 +169,12 @@ if __name__ == '__main__':
     # test_fp = './ref/test/test.txt'
     # merge_data(post_fp, resp_fp, None, test_fp, None)
 
-    test_fp = './ref/Selected_Weibo/test/test.txt'
+    test_fp = './ref/Selected_Weibo/test.txt'
     test_ans = './evaluate/Selected_Weibo/infer/test_ans.txt'
     test_post = './evaluate/Selected_Weibo/infer/test_post.txt'
-    test_ref = './evaluate/ref/infer/test_ref.txt'
-    split_test(test_fp, test_ans, test_post, None)
+    test_ref = './evaluate/Selected_Weibo/infer/test_ref.txt'
+    split_test(test_fp, test_ans, test_post, test_ref)
 
-    preprocess()
+    # preprocess()
     # getConstrativeDataset()
 

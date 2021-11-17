@@ -55,15 +55,13 @@ class SNet(nn.Module):
     def __init__(self, word_embeddings=None):
         super(SNet, self).__init__()
         self.max_turn_num = 1
-        self.max_len = 32
+        self.max_len = 512
         self.vocab_size = 21128
         self.embed_dim = 200
-        self.hidden_size = 50
+        self.hidden_size = 64
         self.candidates_set_size = 14
-        self.out_channels = 8
-        self.fusion_method = "last"
         self.k = 50
-        self.keep_ref_num = 10
+        self.keep_ref_num = 20
         self.pad_token_id = 0
 
         self.pseudo_loss_fuc = nn.KLDivLoss()
@@ -143,7 +141,7 @@ class SNet(nn.Module):
         fcout = self.fc(y)
         y = self.dropout(y + fcout)
         # y = self.dropout(y + refs_embedd) #(B, T, L, hs)
-        y = torch.sum(y, dim=2)
+        y = torch.sum(y, dim=2) * (1.0 / y.size(2))
         logits = self.classifier(y.contiguous().view(batch_size, -1))
         logits = logits.log()
         if pseudo:
@@ -197,6 +195,7 @@ class SNet(nn.Module):
         return keep_words
 
     def load_weight(self, path):
+        print('Loading Selector Parameters...')
         state_dict = torch.load(path)['state_dict']
         new_state_dict = {}
         for key, value in state_dict.items():

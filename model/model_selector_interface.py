@@ -24,9 +24,9 @@ class SInterface(pl.LightningModule):
         return self.model(post, ref, labels, pseudo)
 
     def training_step(self, batch, batch_idx):
-        #train generator
         post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
         #train selector
+        resp = self.pad_resp(resp, ref)
         ref = torch.cat((resp.unsqueeze(1), ref[:,:-1,:]),dim=1)
         for batch_idx in range(ref.size(0)):
             idx =  torch.randperm(ref[batch_idx, :, :].shape[0])
@@ -63,9 +63,18 @@ class SInterface(pl.LightningModule):
 
         return select_score
 
+    def pad_resp(self, resp, ref):
+        ref_len = ref.size(-1)
+        resp_len = resp.size(-1)
+        if resp_len >= ref_len:
+            resp = torch.cat((resp[:, :ref_len-1], resp[:,-1].unsqueeze(1)), dim=-1)
+        else:
+            resp = torch.cat((resp, torch.zeros((resp.size(0), ref_len-resp_len)).type_as(resp)), dim=-1)
+        return resp
+
     def validation_step(self, batch, batch_idx):
         post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
-        # print(post, resp, ref)
+        resp = self.pad_resp(resp, ref)
         ref = torch.cat((resp.unsqueeze(1), ref[:,:-1,:]),dim=1)
         index = [i for i in range(15)]
         label = torch.zeros((ref.size(0))).type_as(ref)

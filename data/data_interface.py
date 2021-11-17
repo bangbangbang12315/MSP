@@ -1,7 +1,9 @@
 import inspect
 import importlib
+import torch
 import pickle as pkl
 import pytorch_lightning as pl
+import torch.nn.utils.rnn as rnn_utils
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import WeightedRandomSampler
 
@@ -30,7 +32,6 @@ class DInterface(pl.LightningDataModule):
 
         # # If you need to balance your data using Pytorch Sampler,
         # # please uncomment the following lines.
-    
         # with open('./data/ref/samples_weight.pkl', 'rb') as f:
         #     self.sample_weight = pkl.load(f)
 
@@ -38,14 +39,26 @@ class DInterface(pl.LightningDataModule):
     #     sampler = WeightedRandomSampler(self.sample_weight, len(self.trainset)*20)
     #     return DataLoader(self.trainset, batch_size=self.batch_size, num_workers=self.num_workers, sampler = sampler)
 
+    def collate_fn(self, batch):
+        post = list(map(lambda x: x['post'], batch))
+        resp = list(map(lambda x: x['resp'], batch))
+        input_ids = list(map(lambda x: x['input_ids'], batch))
+        ref = list(map(lambda x: x['ref'], batch))
+
+        post = rnn_utils.pad_sequence(post, padding_value=0, batch_first=True)
+        resp = rnn_utils.pad_sequence(resp, padding_value=0, batch_first=True)
+        input_ids = rnn_utils.pad_sequence(input_ids, padding_value=0, batch_first=True)
+
+        return {'post': post, 'resp': resp, 'input_ids': input_ids, 'ref': torch.stack(ref, dim=0)}
+
     def train_dataloader(self):
-        return DataLoader(self.trainset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
+        return DataLoader(self.trainset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=self.num_workers, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.valset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+        return DataLoader(self.valset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=self.num_workers, shuffle=False)
 
     def test_dataloader(self):
-        return DataLoader(self.testset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+        return DataLoader(self.testset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=self.num_workers, shuffle=False)
 
     def load_data_module(self):
         name = self.dataset

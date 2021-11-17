@@ -44,7 +44,8 @@ class MInterface(pl.LightningModule):
             outputs = self(None, input_ids, None, None, False, 1)
             logits = outputs.logits.detach()
             if random.random() < 0.7:
-                ref = torch.cat((resp.unsqueeze(1), ref[:,:-1,:]),dim=1)
+                resp = self.pad_resp(resp, ref)
+                ref = torch.cat((resp.unsqueeze(1), ref[:,:-1,:]),dim=1) #keep max_len
                 for batch_idx in range(ref.size(0)):
                     idx =  torch.randperm(ref[batch_idx, :, :].shape[0])
                     label = (idx==0).nonzero()[0]
@@ -71,13 +72,22 @@ class MInterface(pl.LightningModule):
         resp_one_hot = torch.nn.functional.one_hot(resp.view(-1), num_classes=vocab_size)
         ref_one_hot = torch.nn.functional.one_hot(ref.view(-1), num_classes=vocab_size)
         sub_info = resp_one_hot.view(batch_size, max_len, -1).float() - logits
-        ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, max_len // 2, -1).float()
+        ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, ref.size(-1), -1).float()
         select_score = torch.einsum('bclv, bmv -> bclm', ref_one_hot, sub_info)
         select_score = torch.sum(torch.max(select_score, dim=-1)[0], dim=-1)
         select_score = F.softmax(select_score)
         # pseudo_logits, pseudo_label = select_score.topk(3, dim=1)
 
         return select_score
+
+    def pad_resp(self, resp, ref):
+        ref_len = ref.size(-1)
+        resp_len = resp.size(-1)
+        if resp_len >= ref_len:
+            resp = torch.cat((resp[:, :ref_len-1], resp[:,-1].unsqueeze(1)), dim=-1)
+        else:
+            resp = torch.cat((resp, torch.zeros((resp.size(0), ref_len-resp_len)).type_as(resp)), dim=-1)
+        return resp
 
     def validation_step(self, batch, batch_idx):
         post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
@@ -182,9 +192,11 @@ class MInterface(pl.LightningModule):
         Model = getattr(importlib.import_module(
                 '.'+name, package=__package__), name)
         self.model = self.instancialize(Model)
-        if self.hparams.pretrained:
-            self.model.generator.load_weight(self.hparams.pretrained_generator_path)
-            self.model.selector.load_weight(self.hparams.pretrained_selector_path)
+        # if self.hparams.pretrained:
+        #     if self.hparams.pretrained_generator_path:
+        #         self.model.generator.load_weight(self.hparams.pretrained_generator_path)
+        #     if self.hparams.pretrained_selector_path:
+        #         self.model.selector.load_weight(self.hparams.pretrained_selector_path)
 
     def instancialize(self, Model, **other_args):
         """ Instancialize a model using the corresponding parameters

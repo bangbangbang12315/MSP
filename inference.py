@@ -33,7 +33,7 @@ def set_args():
     Sets up the arguments.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--device', default='0', type=str, required=False, help='生成设备')
+    parser.add_argument('--gpus', default=None, type=str, required=False, help='生成设备')
     parser.add_argument('--temperature', default=1, type=float, required=False, help='生成的temperature')
     parser.add_argument('--topk', default=8, type=int, required=False, help='最高k选1')
     parser.add_argument('--topp', default=0, type=float, required=False, help='最高积累概率')
@@ -138,10 +138,10 @@ def main():
     args = set_args()
     logger = create_logger(args)
     # 当用户使用GPU,并且GPU可用时
-    args.cuda = torch.cuda.is_available() and not args.no_cuda
-    device = 'cuda' if args.cuda else 'cpu'
-    logger.info('using device:{}'.format(device))
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+    # args.cuda = torch.cuda.is_available() and not args.no_cuda
+    # device = 'cuda' if args.cuda else 'cpu'
+    # logger.info('using device:{}'.format(device))
+    # os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     tokenizer = BertTokenizer(vocab_file=args.vocab_path)
     # model = GPT2LMHeadModel()
     model_module = MInterface(**vars(args))

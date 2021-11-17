@@ -8,7 +8,3 @@ class SGNet(pl.LightningModule):
         super(SGNet, self).__init__()
         self.generator = GPT2(generator_config)
         self.selector = SNet()
-
-        
-
-    
