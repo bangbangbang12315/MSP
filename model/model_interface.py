@@ -41,53 +41,52 @@ class MInterface(pl.LightningModule):
             return loss
         #train selector
         if optimizer_idx == 1:
-            outputs = self(None, input_ids, None, None, False, 1)
-            logits = outputs.logits.detach()
-            if random.random() < 0.7:
-                resp = self.pad_resp(resp, ref)
-                ref = torch.cat((resp.unsqueeze(1), ref[:,:-1,:]),dim=1) #keep max_len
-                for batch_idx in range(ref.size(0)):
-                    idx =  torch.randperm(ref[batch_idx, :, :].shape[0])
-                    label = (idx==0).nonzero()[0]
-                    cur_ref = ref[batch_idx,idx,:].unsqueeze(0)
-                    if batch_idx == 0:
-                        labels = label
-                        new_ref = cur_ref
-                    else:
-                        labels = torch.cat((labels, label), dim=0)
-                        new_ref = torch.cat((new_ref, cur_ref), dim=0)
-                labels = labels.type_as(ref)
-                loss = self(post, None, new_ref, labels, False, 2)
+            resp = self.pad_resp(resp, ref)
+            ref = torch.cat((resp.unsqueeze(1), ref[:,:-1,:]),dim=1)
+            for batch_idx in range(ref.size(0)):
+                idx =  torch.randperm(ref[batch_idx, :, :].shape[0])
+                label = (idx==0).nonzero()[0]
+                cur_ref = ref[batch_idx,idx,:].unsqueeze(0)
+                if batch_idx == 0:
+                    pseudo_label = label
+                    new_ref = cur_ref
+                else:
+                    pseudo_label = torch.cat((pseudo_label, label), dim=0)
+                    new_ref = torch.cat((new_ref, cur_ref), dim=0)
+            labels = pseudo_label.type_as(ref)
+            pseudo_label = self.get_pseudo_label(resp, new_ref)[:,0]
+            pseudo_label = (pseudo_label / ref.size(-1)) > 0.2 
+            new_ref = new_ref[:,0,:].unsqueeze(1)
+            labels = labels.eq(0)
+            if random.random() < 0.5:
+                # loss,_ = self(post, None, new_ref, labels, False, 2)
+                loss, _ = self(post, None, new_ref, labels, False, 2)
             else:
-                pseudo_label = self.get_pseudo_label(logits, input_ids, ref)
-                loss = self(post, None, ref, pseudo_label, True, 2) 
-            self.log('s_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+                loss,_ = self(post, None, new_ref, pseudo_label, True, 2)
+            self.log('s_loss', loss, on_step=True, on_epoch=True, prog_bar=True) 
             return loss
-    
-    def get_pseudo_label(self, logits, resp, ref):
-        batch_size, max_len = resp.shape
-        vocab_size = 21128
-        # resp_one_hot = torch.zeros(batch_size*max_len, vocab_size).scatter_(1, resp.view(batch_size*max_len, -1), 1)
-        # ref_one_hot = torch.zeros(batch_size*self.candidate_num*max_len, vocab_size).scatter_(1, ref.view(batch_size*self.candidate_num*max_len, -1), 1)
-        resp_one_hot = torch.nn.functional.one_hot(resp.view(-1), num_classes=vocab_size)
-        ref_one_hot = torch.nn.functional.one_hot(ref.view(-1), num_classes=vocab_size)
-        sub_info = resp_one_hot.view(batch_size, max_len, -1).float() - logits
-        ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, ref.size(-1), -1).float()
-        select_score = torch.einsum('bclv, bmv -> bclm', ref_one_hot, sub_info)
-        select_score = torch.sum(torch.max(select_score, dim=-1)[0], dim=-1)
-        select_score = F.softmax(select_score)
-        # pseudo_logits, pseudo_label = select_score.topk(3, dim=1)
-
-        return select_score
-
-    def pad_resp(self, resp, ref):
-        ref_len = ref.size(-1)
-        resp_len = resp.size(-1)
-        if resp_len >= ref_len:
-            resp = torch.cat((resp[:, :ref_len-1], resp[:,-1].unsqueeze(1)), dim=-1)
-        else:
-            resp = torch.cat((resp, torch.zeros((resp.size(0), ref_len-resp_len)).type_as(resp)), dim=-1)
-        return resp
+            # outputs = self(None, input_ids, None, None, False, 1)
+            # logits = outputs.logits.detach()
+            # if random.random() < 0.7:
+            #     resp = self.pad_resp(resp, ref)
+            #     ref = torch.cat((resp.unsqueeze(1), ref[:,:-1,:]),dim=1) #keep max_len
+            #     for batch_idx in range(ref.size(0)):
+            #         idx =  torch.randperm(ref[batch_idx, :, :].shape[0])
+            #         label = (idx==0).nonzero()[0]
+            #         cur_ref = ref[batch_idx,idx,:].unsqueeze(0)
+            #         if batch_idx == 0:
+            #             labels = label
+            #             new_ref = cur_ref
+            #         else:
+            #             labels = torch.cat((labels, label), dim=0)
+            #             new_ref = torch.cat((new_ref, cur_ref), dim=0)
+            #     labels = labels.type_as(ref)
+            #     loss, _ = self(post, None, new_ref, labels, False, 2)
+            # else:
+            #     pseudo_label = self.get_pseudo_label(logits, input_ids, ref)
+            #     loss, _ = self(post, None, ref, pseudo_label, True, 2) 
+            # self.log('s_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            # return loss
 
     def validation_step(self, batch, batch_idx):
         post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
@@ -106,13 +105,51 @@ class MInterface(pl.LightningModule):
         # return (n_correct, n_word)
 
     def test_step(self, batch, batch_idx):
-        # Here we just reuse the validation_step for testing
-        return self.validation_step(batch, batch_idx)
+        # Here we just test the selector
+        post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
+        ref_keep = self(post, None, ref, None, False, 0).detach() #[batch_size, turn_num, context_len]
+        ref_keep = ref_keep.view(post.size(0), -1)
+        post_str = ''.join(self.tokenizer.convert_ids_to_tokens(post.squeeze()))
+        ref_str = ''.join(self.tokenizer.convert_ids_to_tokens(ref_keep.squeeze()))
+        resp_str =  ''.join(self.tokenizer.convert_ids_to_tokens(resp.squeeze()))
+        print('Post: ', post_str)
+        print('Ref: ', ref_str)
+        print('Resp: ', resp_str)
+        return None
+        # self.log('val_acc', n_correct / n_word,
+        #          on_step=False, on_epoch=True, prog_bar=True)
 
     def on_validation_epoch_end(self):
         # Make the Progress Bar leave there
         self.print('')
-        
+
+    def get_pseudo_label(self, resp, ref):
+        batch_size, max_len = resp.shape
+        vocab_size = 21128
+        # resp_one_hot = torch.zeros(batch_size*max_len, vocab_size).scatter_(1, resp.view(batch_size*max_len, -1), 1)
+        # ref_one_hot = torch.zeros(batch_size*self.candidate_num*max_len, vocab_size).scatter_(1, ref.view(batch_size*self.candidate_num*max_len, -1), 1)
+        resp_one_hot = torch.nn.functional.one_hot(resp.view(-1), num_classes=vocab_size)
+        ref_one_hot = torch.nn.functional.one_hot(ref.view(-1), num_classes=vocab_size)
+        resp_one_hot[:,0] = 0
+        ref_one_hot[:,0] = 0 #将pad id置为0
+        sub_info = resp_one_hot.view(batch_size, max_len, -1).float()
+        ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, max_len, -1).float()
+        select_score = torch.einsum('bclv, bmv -> bclm', ref_one_hot, sub_info)
+        select_score = torch.sum(torch.max(select_score, dim=-1)[0], dim=-1)
+        # select_score = F.softmax(select_score)
+        # pseudo_logits, pseudo_label = select_score.topk(3, dim=1)
+
+        return select_score
+
+    def pad_resp(self, resp, ref):
+        ref_len = ref.size(-1)
+        resp_len = resp.size(-1)
+        if resp_len >= ref_len:
+            resp = torch.cat((resp[:, :ref_len-1], resp[:,-1].unsqueeze(1)), dim=-1)
+        else:
+            resp = torch.cat((resp, torch.zeros((resp.size(0), ref_len-resp_len)).type_as(resp)), dim=-1)
+        return resp
+
     def configure_optimizers(self):
         if hasattr(self.hparams, 'weight_decay'):
             weight_decay = self.hparams.weight_decay
@@ -192,11 +229,11 @@ class MInterface(pl.LightningModule):
         Model = getattr(importlib.import_module(
                 '.'+name, package=__package__), name)
         self.model = self.instancialize(Model)
-        # if self.hparams.pretrained:
-        #     if self.hparams.pretrained_generator_path:
-        #         self.model.generator.load_weight(self.hparams.pretrained_generator_path)
-        #     if self.hparams.pretrained_selector_path:
-        #         self.model.selector.load_weight(self.hparams.pretrained_selector_path)
+        if self.hparams.pretrained:
+            if self.hparams.pretrained_generator_path:
+                self.model.generator.load_weight(self.hparams.pretrained_generator_path)
+            if self.hparams.pretrained_selector_path:
+                self.model.selector.load_weight(self.hparams.pretrained_selector_path)
 
     def instancialize(self, Model, **other_args):
         """ Instancialize a model using the corresponding parameters

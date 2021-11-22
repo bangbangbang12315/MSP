@@ -2,6 +2,7 @@ import torch
 import math
 import torch.nn as nn
 import torch.nn.functional as F
+from transformers import BertTokenizer, BertModel, BertConfig
 def _get_activation_fn(activation):
     if activation == "relu":
         return F.relu
@@ -19,13 +20,11 @@ class PositionalWiseFeedForward(nn.Module):
         self.activation = _get_activation_fn(activation)
 
     def forward(self, x):
-        b, t, l, h = x.shape
-        output = x.view(b*t, l, h)
-        output = output.transpose(1, 2)
+        output = x.transpose(1, 2)
         output = self.w2(self.activation(self.w1(output)))
         output = self.dropout(output.transpose(1, 2))
 
-        return output.view(b, t, l, h)
+        return output
 
 class PositionalEncoding(nn.Module):
     "Implement the PE function."
@@ -57,15 +56,16 @@ class SNet(nn.Module):
         self.max_turn_num = 1
         self.max_len = 512
         self.vocab_size = 21128
-        self.embed_dim = 200
-        self.hidden_size = 64
-        self.candidates_set_size = 14
+        self.embed_dim = 768
+        self.hidden_size = 768
+        self.candidates_set_size = 1
         self.k = 50
         self.keep_ref_num = 20
         self.pad_token_id = 0
 
         self.pseudo_loss_fuc = nn.KLDivLoss()
         self.loss_fuc = nn.NLLLoss()
+        self.bce_loss_fuc = nn.BCELoss()
 
         self.dropout_rate = 0.1
         self.query_layer = nn.Linear(self.embed_dim, self.hidden_size)
@@ -73,9 +73,15 @@ class SNet(nn.Module):
         self.value_layer = nn.Linear(self.embed_dim, self.hidden_size)
         self.fc = PositionalWiseFeedForward(self.hidden_size, self.embed_dim, self.dropout_rate, 'gelu')
 
-        if word_embeddings:
-            self.embedding = nn.Embedding(num_embeddings=len(word_embeddings), embedding_dim=self.embed_dim, padding_idx=0,
-                                           _weight=torch.FloatTensor(word_embeddings))
+        if word_embeddings is not None:
+            # if  isinstance(word_embeddings, bool): 
+            #     bert_config = BertConfig('./pretrained/bert-base-chinese/config.json')
+            #     self.embedding = BertModel(config=bert_config)
+            # else:
+            print('Loading Bert for pretrained model...')
+            self.embedding = BertModel.from_pretrained(word_embeddings)
+            # self.embedding = nn.Embedding(num_embeddings=len(word_embeddings), embedding_dim=self.embed_dim, padding_idx=0,
+            #                                _weight=torch.FloatTensor(word_embeddings))
         else:
             self.embedding = nn.Embedding(self.vocab_size, self.embed_dim)
         self.position_layer = PositionalEncoding(self.embed_dim, self.dropout_rate, self.max_len)
@@ -84,12 +90,15 @@ class SNet(nn.Module):
         self.attn_drop = nn.Dropout(self.dropout_rate)
         self.dropout = nn.Dropout(self.dropout_rate)
         self.proj = nn.Linear(self.hidden_size, self.hidden_size)
+        self.cnn = nn.Conv1d(in_channels=self.hidden_size, out_channels=self.hidden_size, kernel_size=3)
+        self.max_pool = nn.MaxPool1d(kernel_size=3)
+        self.lstm = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True)
         self.classifier = nn.Sequential(
             nn.Linear(self.candidates_set_size * self.hidden_size, 4 * self.hidden_size),
             nn.ReLU(),
             nn.Dropout(self.dropout_rate),
             nn.Linear(4 * self.hidden_size, self.candidates_set_size),
-            nn.Softmax()
+            nn.Sigmoid()
         )
 
     def padding_mask(self, seq_k, seq_q, pad_token=0):
@@ -124,31 +133,48 @@ class SNet(nn.Module):
         refs: [batch_size, candidate_num, max_len]
         label: [batch_size, candidate_num]
         '''
-        batch_size = post.size(0)
-        post_embedd = self.embedding(post)
-        refs_embedd = self.embedding(refs)
+        batch_size, length = post.shape
         refs_mask = self.padding_mask(refs, post, self.pad_token_id)
+        with torch.no_grad():
+            post_embedd = self.embedding(post)[0]
+            refs = refs.view(batch_size*self.candidates_set_size, -1)
+            refs_embedd = self.embedding(refs)[0]
+        refs_embedd = refs_embedd.view(batch_size, self.candidates_set_size, -1, self.embed_dim)
 
-        post_embedd = self.dropout(post_embedd)
-        refs_embedd = self.dropout(refs_embedd)
-
-        post_embedd = self.position_layer(post_embedd)
-        refs_embedd = self.position_layer(refs_embedd)
+        # post_embedd = self.embedding(post)
+        # refs_embedd = self.embedding(refs)
+        # post_embedd = self.dropout(post_embedd)
+        # refs_embedd = self.dropout(refs_embedd)
+        # post_embedd = self.position_layer(post_embedd)
+        # refs_embedd = self.position_layer(refs_embedd)
 
         post = self.atten_layer_norm(post_embedd)
         y = self.cross_attention(post, refs_embedd, refs_embedd, refs_mask)
+        y = y.view(batch_size*self.candidates_set_size, length, -1)
         y = self.con_layer_norm(y)
         fcout = self.fc(y)
         y = self.dropout(y + fcout)
-        # y = self.dropout(y + refs_embedd) #(B, T, L, hs)
-        y = torch.sum(y, dim=2) * (1.0 / y.size(2))
-        logits = self.classifier(y.contiguous().view(batch_size, -1))
-        logits = logits.log()
-        if pseudo:
-            loss = self.pseudo_loss_fuc(logits, label)
-        else:
-            loss = self.loss_fuc(logits, label)
-        return loss
+        y = y.transpose(1, 2) #cnn used in length dim
+        y = self.cnn(y)
+        y = self.max_pool(y)
+        y = y.transpose(1, 2) #[batch_size*turn_num, max_len, hidden]
+        _, (hn, cn) = self.lstm(y)
+        y = hn.transpose(0,1).squeeze()
+        # y = torch.sum(y, dim=1) * (1.0 / y.size(1))
+        logits = self.classifier(y.contiguous().view(batch_size, -1)).squeeze()
+        # post_embedd = post_embedd[:,0,:]
+        # refs_embedd = refs_embedd[:,:,0,:]
+        # y = torch.cat((post_embedd.unsqueeze(1).repeat(1,self.candidates_set_size,1), refs_embedd),dim=-1)
+        # logits = self.classifier(y.contiguous().view(batch_size, -1))
+
+        # logits = logits.log()
+        # if pseudo:
+        #     loss = self.pseudo_loss_fuc(logits, label)
+        # else:
+        #     loss = self.loss_fuc(logits, label)
+        label = label.float()
+        loss = self.bce_loss_fuc(logits, label)
+        return loss, logits
 
     def extract_M(self, post, refs):
         '''
@@ -158,16 +184,19 @@ class SNet(nn.Module):
         '''
         batch_size = post.size(0)
         contexts_indices = post.unsqueeze(1)
-
-        post_embedd = self.embedding(post)
-        refs_embedd = self.embedding(refs)
+        candidates_set_size = refs.size(1)
+        # post_embedd = self.embedding(post)
+        # refs_embedd = self.embedding(refs)
+        # refs_mask = self.padding_mask(refs, post, self.pad_token_id)
+        # post_embedd = self.dropout(post_embedd)
+        # refs_embedd = self.dropout(refs_embedd)
+        # post_embedd = self.position_layer(post_embedd)
+        # refs_embedd = self.position_layer(refs_embedd)
         refs_mask = self.padding_mask(refs, post, self.pad_token_id)
-
-        post_embedd = self.dropout(post_embedd)
-        refs_embedd = self.dropout(refs_embedd)
-
-        post_embedd = self.position_layer(post_embedd)
-        refs_embedd = self.position_layer(refs_embedd)
+        post_embedd = self.embedding(post)[0]
+        refs = refs.view(batch_size*candidates_set_size, -1)
+        refs_embedd = self.embedding(refs)[0]
+        refs_embedd = refs_embedd.view(batch_size, candidates_set_size, -1, self.embed_dim)
 
         post = self.atten_layer_norm(post_embedd)
         att = self.cross_attention(post, refs_embedd, refs_embedd, refs_mask, True) #[b, t, l, s]

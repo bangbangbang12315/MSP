@@ -105,11 +105,11 @@ class SMN(nn.Module):
         #     self.id2word[v] = k
         # self.device = torch.device('cuda:0,1')
         self.dropout_rate = 0.1
-        if word_embeddings:
-            self.embedding = nn.Embedding(num_embeddings=len(word_embeddings), embedding_dim=self.embed_dim, padding_idx=0,
-                                           _weight=torch.FloatTensor(word_embeddings))
-        else:
-            self.embedding = nn.Embedding(self.vocab_size, self.embed_dim)
+        # if word_embeddings:
+        #     self.embedding = nn.Embedding(num_embeddings=len(word_embeddings), embedding_dim=self.embed_dim, padding_idx=0,
+        #                                    _weight=torch.FloatTensor(word_embeddings))
+        # else:
+        self.embedding = nn.Embedding(self.vocab_size, self.embed_dim)
         
         # self.gru_context = GRUModel(self.embed_dim, self.hidden_size)
         # self.gru_response = GRUModel(self.embed_dim, self.hidden_size)
@@ -141,6 +141,7 @@ class SMN(nn.Module):
             M: [batch_size * candidates_set_size, turn_num, seq_length, seq_length]
         '''
         batch_size = contexts_indices.size(0)
+        context_len = contexts_indices.size(1)
         contexts_indices = contexts_indices.unsqueeze(1)
         # print(contexts_indices.shape)
         contexts_seq_len = (contexts_indices != 0).sum(dim=-1).long() # [batch_size, turn_num]
@@ -157,14 +158,14 @@ class SMN(nn.Module):
         contexts_all_inputs_len = contexts_seq_len.view(-1) # [batch_size*turn_num]
         candidates_all_inputs_len = candidates_seq_len.view(-1) # [batch_size*candidates_set_size]
 
-        contexts_inputs = contexts_embed.view(-1, self.max_seq_len, self.embed_dim) # [batch_size*turn_num, seq_len, embed_dim]
+        contexts_inputs = contexts_embed.view(-1, context_len, self.embed_dim) # [batch_size*turn_num, seq_len, embed_dim]
         candidates_inputs = candidates_embed.view(-1, self.max_seq_len, self.embed_dim) # [batch_size*candidates_set_size, seq_len, embed_dim]
 
         # contexts_hiddens = self.gru_context(contexts_inputs, contexts_all_inputs_len) # [batch_size*turn_num, seq_len, hidden_size]
         contexts_hiddens,_ = self.gru_context(contexts_inputs)
         candidates_hiddens,_ = self.gru_response(candidates_inputs) # [batch_size*candidates_set_size, seq_len, hidden_size]
 
-        contexts_hiddens = contexts_hiddens.view(-1, self.max_turn_num, self.max_seq_len, self.hidden_size) # [batch_size, turn_num, seq_length, hidden_size]
+        contexts_hiddens = contexts_hiddens.view(-1, self.max_turn_num, context_len, self.hidden_size) # [batch_size, turn_num, seq_length, hidden_size]
         candidates_hiddens = candidates_hiddens.view(-1, self.candidates_set_size, self.max_seq_len, self.hidden_size) # [batch_size, candidates_set_size, seq_length, hidden_size]
 
         M1 = torch.einsum("btph, bcqh -> btcpq", contexts_embed, candidates_embed) # [batch_size, turn_num, candidates_set_size, seq_length, seq_length]
@@ -204,10 +205,11 @@ class SMN(nn.Module):
                 keep_words = torch.cat((keep_words,keep_word), dim=0)
         return keep_words
 
-    def forward(self, contexts_indices, candidates_indices, y_dev):
+    def forward(self, contexts_indices, candidates_indices, y_dev, pseudo=False):
         # contexts_indices: [batch_size, turn_num, seq_length] post
         # candidates_indices: [batch_size, candidates_set_size, seq_length] ref
         batch_size = contexts_indices.size(0)
+        contexts_len = contexts_indices.size(1)
         contexts_indices = contexts_indices.unsqueeze(1)
         contexts_seq_len = (contexts_indices != 0).sum(dim=-1).long() # [batch_size, turn_num]
         contexts_turns_num = (contexts_seq_len != 0).sum(dim=-1).long() # [batch_size]
@@ -223,14 +225,14 @@ class SMN(nn.Module):
         contexts_all_inputs_len = contexts_seq_len.view(-1) # [batch_size*turn_num]
         candidates_all_inputs_len = candidates_seq_len.view(-1) # [batch_size*candidates_set_size]
 
-        contexts_inputs = contexts_embed.view(-1, self.max_seq_len, self.embed_dim) # [batch_size*turn_num, seq_len, embed_dim]
+        contexts_inputs = contexts_embed.view(-1, contexts_len, self.embed_dim) # [batch_size*turn_num, seq_len, embed_dim]
         candidates_inputs = candidates_embed.view(-1, self.max_seq_len, self.embed_dim) # [batch_size*candidates_set_size, seq_len, embed_dim]
 
         contexts_hiddens,_ = self.gru_context(contexts_inputs) # [batch_size*turn_num, seq_len, hidden_size]
 
         candidates_hiddens,_ = self.gru_response(candidates_inputs) # [batch_size*candidates_set_size, seq_len, hidden_size]
 
-        contexts_hiddens = contexts_hiddens.view(-1, self.max_turn_num, self.max_seq_len, self.hidden_size) # [batch_size, turn_num, seq_length, hidden_size]
+        contexts_hiddens = contexts_hiddens.view(-1, self.max_turn_num, contexts_len, self.hidden_size) # [batch_size, turn_num, seq_length, hidden_size]
         candidates_hiddens = candidates_hiddens.view(-1, self.candidates_set_size, self.max_seq_len, self.hidden_size) # [batch_size, candidates_set_size, seq_length, hidden_size]
 
         M1 = torch.einsum("btph, bcqh -> btcpq", contexts_embed, candidates_embed) # [batch_size, turn_num, candidates_set_size, seq_length, seq_length]
@@ -243,13 +245,13 @@ class SMN(nn.Module):
 
         M = [M1, M2]
         M = torch.stack(M, dim=2).contiguous() # [batch_size * candidates_set_size, turn_num, 2, seq_length, seq_length]
-        M = M.view(-1, 2, self.max_seq_len, self.max_seq_len) # [batch_size * candidates_set_size * turn_num, 2, seq_length, seq_length]
+        M = M.view(-1, 2, contexts_len, self.max_seq_len) # [batch_size * candidates_set_size * turn_num, 2, seq_length, seq_length]
         M = self.cnn_layer(M)
         # print("#" * 20)
         # print("M shape: ", M.shape)
         # print("#" * 20)
         # 16与设置的文本最大长度和cnn的实现方式相关，可计算得到
-        M = M.view(-1, self.candidates_set_size, self.out_channels, 10, 10) # [batch_size * turn_num, candidates_set_size, out_channels, 16, 16]
+        M = M.view(-1, self.candidates_set_size, self.out_channels, (contexts_len-2)//3, 10) # [batch_size * turn_num, candidates_set_size, out_channels, 16, 16]
         size_0 = M.size(0)
         M = M.view(size_0, self.candidates_set_size, -1) # [batch_size * turn_num, candidates_set_size, out_channels *16 * 16]
 

@@ -8,7 +8,7 @@ class GPT2(nn.Module):
         self.config = GPT2Config.from_json_file(config_path)
         self.model = GPT2LMHeadModel(config=self.config)
     
-    def forward(self, input_ids, ref=None):
+    def forward(self, input_ids, ref=None, output_attentions=False):
         labels = input_ids
         if ref != None:
             input_ids = torch.cat([ref, input_ids], dim=-1)
@@ -18,6 +18,7 @@ class GPT2(nn.Module):
         r = self.model(
             input_ids=input_ids,
             labels=labels,
+            output_attentions=output_attentions,
             return_dict=True,
         )
         return r

@@ -52,7 +52,10 @@ def main(args):
     # args.logger = logger
 
     trainer = Trainer.from_argparse_args(args)
-    trainer.fit(model, data_module)
+    if args.is_test:    
+        trainer.test(model, data_module)
+    else:
+        trainer.fit(model, data_module)
 
 
 if __name__ == '__main__':
@@ -60,7 +63,7 @@ if __name__ == '__main__':
     # Basic Training Control
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--num_workers', default=8, type=int)
-    parser.add_argument('--gpus', default='0,1', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
+    parser.add_argument('--gpus', default='0', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
     parser.add_argument('--seed', default=1234, type=int)
     parser.add_argument('--min_epochs', default=5, type=int)
     parser.add_argument('--max_epochs', default=100, type=int)
@@ -68,6 +71,8 @@ if __name__ == '__main__':
     parser.add_argument('--default_root_dir', default='checkpoints', type=str)
     parser.add_argument('--lr', default=1e-3, type=float)
     parser.add_argument('--distributed_backend', default='dp', type=str)
+    parser.add_argument('--fast_dev_run', action='store_true')
+    parser.add_argument('--is_test', action='store_true')
 
     # LR Scheduler
     parser.add_argument('--lr_scheduler', choices=['step', 'cosine','warmup'], type=str)
@@ -89,9 +94,11 @@ if __name__ == '__main__':
     parser.add_argument('--vocab_path', default='pretrained/gpt2-chinese-cluecorpussmall/vocab.txt', type=str)
     parser.add_argument('--train_data_dir', default='ref/Selected_Weibo/train.txt', type=str)
     parser.add_argument('--valid_data_dir', default='ref/Selected_Weibo/dev.txt', type=str)
+    parser.add_argument('--test_data_dir', default='ref/Selected_Weibo/test.txt', type=str)
     parser.add_argument('--model_name', default='SGNet', type=str)
     parser.add_argument('--pretrained_generator_path', default=None, type=str)
     parser.add_argument('--pretrained_selector_path', default=None, type=str)
+    parser.add_argument('--word_embeddings', default=None, type=str)
     parser.add_argument('--pretrained', action='store_true')
     parser.add_argument('--loss', default='ce', type=str)
     parser.add_argument('--weight_decay', default=1e-5, type=float)
