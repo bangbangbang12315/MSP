@@ -59,13 +59,13 @@ class SNet(nn.Module):
         self.embed_dim = 768
         self.hidden_size = 768
         self.candidates_set_size = 1
-        self.k = 50
-        self.keep_ref_num = 20
+        self.k = 300
+        self.keep_ref_num = 200
         self.pad_token_id = 0
 
         self.pseudo_loss_fuc = nn.KLDivLoss()
         self.loss_fuc = nn.NLLLoss()
-        self.bce_loss_fuc = nn.BCELoss()
+        self.bce_loss_fuc = nn.BCEWithLogitsLoss()
 
         self.dropout_rate = 0.1
         self.query_layer = nn.Linear(self.embed_dim, self.hidden_size)
@@ -97,8 +97,7 @@ class SNet(nn.Module):
             nn.Linear(self.candidates_set_size * self.hidden_size, 4 * self.hidden_size),
             nn.ReLU(),
             nn.Dropout(self.dropout_rate),
-            nn.Linear(4 * self.hidden_size, self.candidates_set_size),
-            nn.Sigmoid()
+            nn.Linear(4 * self.hidden_size, self.candidates_set_size)
         )
 
     def padding_mask(self, seq_k, seq_q, pad_token=0):
@@ -117,7 +116,7 @@ class SNet(nn.Module):
         att = torch.einsum('blh, btsh -> btls', q, k)
         att = att * (1.0 / math.sqrt(k.size(-1)))
         if mask is not None:
-            att = att.masked_fill(mask == True, -1e10)
+            att = att.masked_fill(mask == True, -1e4)
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
         if return_att:
@@ -231,4 +230,4 @@ class SNet(nn.Module):
             key = key[6:]
             new_state_dict[key] = value
         self.load_state_dict(new_state_dict)
-        if torch.cuda.is_available(): self.cuda()
+        # if torch.cuda.is_available(): self.cuda()

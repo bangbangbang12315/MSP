@@ -32,7 +32,7 @@ def load_model_path(root=None, version=None, v_num=None, best=False):
     if best:
         files=[i for i in list(Path(root).iterdir()) if i.stem.startswith('best')]
         files.sort(key=sort_by_epoch, reverse=True)
-        res = str(files[0])
+        res = str(files[1])
     else:
         res = str(Path(root) / 'last.ckpt')
     return res

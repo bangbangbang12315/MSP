@@ -23,7 +23,7 @@ from transformers import (BertTokenizer, GPT2Config, GPT2LMHeadModel,
 
 from model import MInterface
 from data import DInterface
-from bertviz import head_view
+# from bertviz import head_view
 PAD = '[PAD]'
 pad_id = 0
 
@@ -176,39 +176,39 @@ def main():
     with open(args.inference_path, 'w') as ftgt:
         with torch.no_grad():
             for batch_idx, input_ids in enumerate(test_dataloader):
-                visualize(model, tokenizer, input_ids)
-                # post, resp, ref = input_ids["post"], input_ids["resp"], input_ids["ref"]
-                # # input_ids = torch.tensor(input_ids).unsqueeze(0).to(device)
-                # poststr = ''.join(tokenizer.convert_ids_to_tokens(post.squeeze()))
-                # generated = []
-                # ref_keep = model.selector.extract_M(post, ref).detach() #[batch_size, turn_num, context_len]
-                # ref_keep = ref_keep.view(post.size(0), -1)
-                # ref_str = ''.join(tokenizer.convert_ids_to_tokens(ref_keep.squeeze()))
-                # print(poststr, ref_str)
-                # for _ in range(args.max_len):
-                #     outputs = model.generator(post, ref_keep)
-                #     logits = outputs.logits
-                #     next_token_logits = logits[0][-1, :]
+                # visualize(model, tokenizer, input_ids)
+                post, resp, ref = input_ids["post"], input_ids["resp"], input_ids["ref"]
+                # input_ids = torch.tensor(input_ids).unsqueeze(0).to(device)
+                poststr = ''.join(tokenizer.convert_ids_to_tokens(post.squeeze()))
+                generated = []
+                ref_keep = model.selector.extract_M(post, ref).detach() #[batch_size, turn_num, context_len]
+                ref_keep = ref_keep.view(post.size(0), -1)
+                ref_str = ''.join(tokenizer.convert_ids_to_tokens(ref_keep.squeeze()))
+                print(poststr, ref_str)
+                for _ in range(args.max_len):
+                    outputs = model.generator(post, ref_keep)
+                    logits = outputs.logits
+                    next_token_logits = logits[0][-1, :]
                     
-                #     # 对于已生成的结果generated中的每个token添加一个重复惩罚项，降低其生成概率
-                #     for id in set(generated):
-                #         next_token_logits[id] /= args.repetition_penalty
-                #     next_token_logits = next_token_logits / args.temperature
-                #     # 对于[UNK]的概率设为无穷小，也就是说模型的预测结果不可能是[UNK]这个token
-                #     next_token_logits[tokenizer.convert_tokens_to_ids('[UNK]')] = -float('Inf')
-                #     filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=args.topk, top_p=args.topp)
-                #     # torch.multinomial表示从候选集合中无放回地进行抽取num_samples个元素，权重越高，抽到的几率越高，返回元素的下标
-                #     next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
-                #     if next_token == tokenizer.sep_token_id:  # 遇到[SEP]则表明response生成结束
-                #         break
-                #     generated.append(next_token.item())
-                #     post = torch.cat((post, next_token.unsqueeze(0)), dim=1)
-                # text = ''.join(tokenizer.convert_ids_to_tokens(generated))
-                # ftgt.write(text + '\n')
-                # if cnt < 100:
-                #     cnt += 1
-                #     print('Post: ', poststr)
-                #     print('Response: ', text)
+                    # 对于已生成的结果generated中的每个token添加一个重复惩罚项，降低其生成概率
+                    for id in set(generated):
+                        next_token_logits[id] /= args.repetition_penalty
+                    next_token_logits = next_token_logits / args.temperature
+                    # 对于[UNK]的概率设为无穷小，也就是说模型的预测结果不可能是[UNK]这个token
+                    next_token_logits[tokenizer.convert_tokens_to_ids('[UNK]')] = -float('Inf')
+                    filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=args.topk, top_p=args.topp)
+                    # torch.multinomial表示从候选集合中无放回地进行抽取num_samples个元素，权重越高，抽到的几率越高，返回元素的下标
+                    next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
+                    if next_token == tokenizer.sep_token_id:  # 遇到[SEP]则表明response生成结束
+                        break
+                    generated.append(next_token.item())
+                    post = torch.cat((post, next_token.unsqueeze(0)), dim=1)
+                text = ''.join(tokenizer.convert_ids_to_tokens(generated))
+                ftgt.write(text + '\n')
+                if cnt < 100:
+                    cnt += 1
+                    print('Post: ', poststr)
+                    print('Response: ', text)
 
 if __name__ == '__main__':
     main()
