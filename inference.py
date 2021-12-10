@@ -160,7 +160,7 @@ def main():
     tokenizer = BertTokenizer(vocab_file=args.vocab_path)
     # model = GPT2LMHeadModel()
     model_module = MInterface(**vars(args))
-    model_module = model_module.load_from_checkpoint(checkpoint_path=args.model_path)
+    model_module = model_module.load_from_checkpoint(checkpoint_path=args.model_path, pretrained=False)
     model = model_module.model
     if args.save_samples_path:
         if not os.path.exists(args.save_samples_path):
@@ -173,11 +173,19 @@ def main():
     data_module = DInterface(**vars(args))
     data_module.setup('test')
     test_dataloader = data_module.test_dataloader()
+    if args.gpus != 'cpu':
+        device = torch.device('cuda:{}'.format(args.gpus))  
+    else:
+        device = torch.device('cpu')
+    model = model.to(device)
     with open(args.inference_path, 'w') as ftgt:
         with torch.no_grad():
             for batch_idx, input_ids in enumerate(test_dataloader):
                 # visualize(model, tokenizer, input_ids)
                 post, resp, ref = input_ids["post"], input_ids["resp"], input_ids["ref"]
+                post = post.to(device)
+                resp = resp.to(device)
+                ref = ref.to(device)
                 # input_ids = torch.tensor(input_ids).unsqueeze(0).to(device)
                 poststr = ''.join(tokenizer.convert_ids_to_tokens(post.squeeze()))
                 generated = []

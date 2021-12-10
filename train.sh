@@ -1,6 +1,6 @@
 python main.py  --lr_scheduler warmup \
                 --optimizer AdamW  \
-                --batch_size 16 \
+                --batch_size 4 \
                 --accumulate_grad_batches 16 \
                 --precision 16 \
                 --model_name SGNet \

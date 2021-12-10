@@ -39,19 +39,20 @@ def main(args):
     pl.seed_everything(args.seed)
     load_path = load_model_path_by_args(args)
     data_module = DInterface(**vars(args))
+    args.callbacks = load_callbacks()
 
     if load_path is None:
         model = MInterface(**vars(args))
+        trainer = Trainer.from_argparse_args(args)
     else:
         model = MInterface(**vars(args))
         args.resume_from_checkpoint = load_path
+        trainer = Trainer.from_argparse_args(args, pretrained=False)
 
     # # If you want to change the logger's saving folder
     # logger = TensorBoardLogger(save_dir='kfold_log', name=args.log_dir)
-    args.callbacks = load_callbacks()
+    
     # args.logger = logger
-
-    trainer = Trainer.from_argparse_args(args)
     if args.is_test:    
         trainer.test(model, data_module)
     else:
@@ -63,7 +64,7 @@ if __name__ == '__main__':
     # Basic Training Control
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--num_workers', default=8, type=int)
-    parser.add_argument('--gpus', default='1', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
+    parser.add_argument('--gpus', default='2', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
     parser.add_argument('--seed', default=1104, type=int)
     parser.add_argument('--min_epochs', default=5, type=int)
     parser.add_argument('--max_epochs', default=100, type=int)
@@ -98,10 +99,11 @@ if __name__ == '__main__':
     parser.add_argument('--valid_data_dir', default='ref/Selected_Weibo/dev.txt', type=str)
     parser.add_argument('--test_data_dir', default='ref/Selected_Weibo/test.txt', type=str)
     parser.add_argument('--model_name', default='SGNet', type=str)
+    parser.add_argument('--pretrained', action='store_true')
     parser.add_argument('--pretrained_generator_path', default=None, type=str)
     parser.add_argument('--pretrained_selector_path', default=None, type=str)
     parser.add_argument('--word_embeddings', default=None, type=str)
-    parser.add_argument('--pretrained', action='store_true')
+
     parser.add_argument('--loss', default='ce', type=str)
     parser.add_argument('--weight_decay', default=1e-5, type=float)
     parser.add_argument('--no_augment', action='store_true')
