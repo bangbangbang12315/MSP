@@ -39,19 +39,18 @@ def main(args):
     pl.seed_everything(args.seed)
     load_path = load_model_path_by_args(args)
     data_module = DInterface(**vars(args))
-    args.callbacks = load_callbacks()
-
+    
     if load_path is None:
         model = MInterface(**vars(args))
-        trainer = Trainer.from_argparse_args(args)
     else:
         model = MInterface(**vars(args))
         args.resume_from_checkpoint = load_path
-        trainer = Trainer.from_argparse_args(args, pretrained=False)
+        # model = MInterface.load_from_checkpoint(checkpoint_path=load_path)
 
     # # If you want to change the logger's saving folder
     # logger = TensorBoardLogger(save_dir='kfold_log', name=args.log_dir)
-    
+    args.callbacks = load_callbacks()
+    trainer = Trainer.from_argparse_args(args)
     # args.logger = logger
     if args.is_test:    
         trainer.test(model, data_module)
@@ -64,11 +63,11 @@ if __name__ == '__main__':
     # Basic Training Control
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--num_workers', default=8, type=int)
-    parser.add_argument('--gpus', default='2', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
+    parser.add_argument('--gpus', default='1', type=str, required=False, help="设置使用哪些显卡，用逗号分割")
     parser.add_argument('--seed', default=1104, type=int)
     parser.add_argument('--min_epochs', default=5, type=int)
     parser.add_argument('--max_epochs', default=100, type=int)
-    parser.add_argument('--val_check_interval', default=10000, type=int)
+    parser.add_argument('--val_check_interval', default=100000, type=int)
     parser.add_argument('--default_root_dir', default='checkpoints', type=str)
     parser.add_argument('--lr', default=1e-3, type=float)
     parser.add_argument('--distributed_backend', default='dp', type=str)

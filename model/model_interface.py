@@ -13,10 +13,7 @@ from transformers import AdamW, get_linear_schedule_with_warmup
 class MInterface(pl.LightningModule):
     def __init__(self, model_name, loss, lr, **kargs):
         super().__init__()
-        self.pretrained = kargs["pretrained"]
-        self.pretrained_generator_path = kargs["pretrained_generator_path"]
-        self.pretrained_selector_path = kargs["pretrained_selector_path"]
-        self.save_hyperparameters(ignore=["pretrained", "pretrained_generator_path", "pretrained_selector_path"])
+        self.save_hyperparameters()
         self.load_model()
         self.configure_loss()
         self.candidate_num = 14
@@ -233,11 +230,11 @@ class MInterface(pl.LightningModule):
                 '.'+name, package=__package__), name)
         self.model = self.instancialize(Model)
         # print(self.pretrained,self.hparams)
-        if self.pretrained:
-            if self.pretrained_generator_path:
-                self.model.generator.load_weight(self.pretrained_generator_path)
-            if self.pretrained_selector_path:
-                self.model.selector.load_weight(self.pretrained_selector_path)
+        # if self.hparams.pretrained:
+        #     if self.hparams.pretrained_generator_path:
+        #         self.model.generator.load_weight(self.hparams.pretrained_generator_path)
+        #     if self.hparams.pretrained_selector_path:
+        #         self.model.selector.load_weight(self.hparams.pretrained_selector_path)
 
     def instancialize(self, Model, **other_args):
         """ Instancialize a model using the corresponding parameters

@@ -23,6 +23,7 @@ from transformers import (BertTokenizer, GPT2Config, GPT2LMHeadModel,
 
 from model import MInterface
 from data import DInterface
+from pytorch_lightning import Trainer
 # from bertviz import head_view
 PAD = '[PAD]'
 pad_id = 0
@@ -159,8 +160,12 @@ def main():
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     tokenizer = BertTokenizer(vocab_file=args.vocab_path)
     # model = GPT2LMHeadModel()
-    model_module = MInterface(**vars(args))
-    model_module = model_module.load_from_checkpoint(checkpoint_path=args.model_path, pretrained=False)
+    # model_module = MInterface(**vars(args))
+    model_module = MInterface.load_from_checkpoint(checkpoint_path=args.model_path)
+    # args.resume_from_checkpoint = args.model_path
+    # model_module = MInterface(**vars(args))
+    # trainer = Trainer.from_argparse_args(args)
+
     model = model_module.model
     if args.save_samples_path:
         if not os.path.exists(args.save_samples_path):
