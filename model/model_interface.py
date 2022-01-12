@@ -230,11 +230,11 @@ class MInterface(pl.LightningModule):
                 '.'+name, package=__package__), name)
         self.model = self.instancialize(Model)
         # print(self.pretrained,self.hparams)
-        # if self.hparams.pretrained:
-        #     if self.hparams.pretrained_generator_path:
-        #         self.model.generator.load_weight(self.hparams.pretrained_generator_path)
-        #     if self.hparams.pretrained_selector_path:
-        #         self.model.selector.load_weight(self.hparams.pretrained_selector_path)
+        if self.hparams.pretrained:
+            if self.hparams.pretrained_generator_path:
+                self.model.generator.load_weight(self.hparams.pretrained_generator_path)
+            if self.hparams.pretrained_selector_path:
+                self.model.selector.load_weight(self.hparams.pretrained_selector_path)
 
     def instancialize(self, Model, **other_args):
         """ Instancialize a model using the corresponding parameters

@@ -59,10 +59,8 @@ class SNet(nn.Module):
         self.embed_dim = 768
         self.hidden_size = 768
         self.candidates_set_size = 1
-        self.k = 400 #max 448 token
-        self.keep_ref_num = 400
-        # self.k = 100
-        # self.keep_ref_num = 50
+        self.k = 300 #max 448 token
+        self.keep_ref_num = 200
         self.pad_token_id = 0
 
         self.pseudo_loss_fuc = nn.KLDivLoss()

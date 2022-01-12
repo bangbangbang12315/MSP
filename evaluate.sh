@@ -1,8 +1,8 @@
 DEVICES='0'
-INFERENCE_PATH="./evaluate/Selected_Weibo/inference_test.txt"
+INFERENCE_PATH="./evaluate/Selected_Weibo/inference_text.txt"
 MODEL_TEST_PATH='./ref/Selected_Weibo/test.txt'
 TEST_ANS_PATH="./evaluate/Selected_Weibo/infer/test_ans.txt"
-MODEL_PATH='checkpoints/lightning_logs/version_82/checkpoints/best-epoch=06-val_loss=2.444.ckpt'
+MODEL_PATH='checkpoints/lightning_logs/version_28/checkpoints/best-epoch=04-val_loss=2.320.ckpt'
 DIR_PATH='./evaluate/Selected_Weibo'
 LOG_PATH='./ref/Selected_Weibo/interact.log'
 python inference.py \

@@ -183,10 +183,14 @@ def main():
     else:
         device = torch.device('cpu')
     model = model.to(device)
-    with open(args.inference_path, 'w') as ftgt:
+    pass_value = 0
+    with open(args.inference_path, 'a+') as ftgt:
         with torch.no_grad():
             for batch_idx, input_ids in enumerate(test_dataloader):
                 # visualize(model, tokenizer, input_ids)
+                pass_value += 1
+                if pass_value <= 1016:
+                    continue
                 post, resp, ref = input_ids["post"], input_ids["resp"], input_ids["ref"]
                 post = post.to(device)
                 resp = resp.to(device)
