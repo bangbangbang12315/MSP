@@ -3,7 +3,7 @@ python main.py  --lr_scheduler warmup \
                 --batch_size 8 \
                 --accumulate_grad_batches 16 \
                 --precision 16 \
-                --model_name SGNet \
+                --model_name MSP \
                 --gpus 3 \
                 --word_embeddings ./pretrained/bert-base-chinese \
                 --pretrained \
