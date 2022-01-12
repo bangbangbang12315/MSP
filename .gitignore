@@ -7,11 +7,9 @@ __pycache__/
 *.so
 
 # checkpoints
-checkpoints/
-pretrained/
+
 # dataset
-ref/
-evaluate/
+
 # Distribution / packaging
 .Python
 build/
