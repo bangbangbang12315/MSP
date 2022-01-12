@@ -1,0 +1,7 @@
+torch==1.8.0
+transformers==4.12.5
+numpy==1.21.4
+tqdm
+pytorch-lightning==1.5.4
+rouge
+nltk

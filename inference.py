@@ -57,7 +57,7 @@ def set_args():
     parser.add_argument('--vocab_path', default='pretrained/gpt2-chinese-cluecorpussmall/vocab.txt', type=str)
     # parser.add_argument('--train_data_dir', default='ref/Selected_Weibo/train.txt', type=str)
     # parser.add_argument('--valid_data_dir', default='ref/Selected_Weibo/dev.txt', type=str)
-    parser.add_argument('--model_name', default='SGNet', type=str)
+    parser.add_argument('--model_name', default='MSP', type=str)
     parser.add_argument('--model_path', default=None, type=str)
     parser.add_argument('--pretrained_generator_path', default='pretrained/gpt2-chinese-cluecorpussmall/', type=str)
     parser.add_argument('--pretrained_selector_path', default='pretrained/smn/weibo.SMN.2021-10-06_10:21:55.pt', type=str)
