@@ -65,6 +65,28 @@ class MInterface(pl.LightningModule):
                 loss,_ = self(post, None, new_ref, pseudo_label, True, 2)
             self.log('s_loss', loss, on_step=True, on_epoch=True, prog_bar=True) 
             return loss
+            # outputs = self(None, input_ids, None, None, False, 1)
+            # logits = outputs.logits.detach()
+            # if random.random() < 0.7:
+            #     resp = self.pad_resp(resp, ref)
+            #     ref = torch.cat((resp.unsqueeze(1), ref[:,:-1,:]),dim=1) #keep max_len
+            #     for batch_idx in range(ref.size(0)):
+            #         idx =  torch.randperm(ref[batch_idx, :, :].shape[0])
+            #         label = (idx==0).nonzero()[0]
+            #         cur_ref = ref[batch_idx,idx,:].unsqueeze(0)
+            #         if batch_idx == 0:
+            #             labels = label
+            #             new_ref = cur_ref
+            #         else:
+            #             labels = torch.cat((labels, label), dim=0)
+            #             new_ref = torch.cat((new_ref, cur_ref), dim=0)
+            #     labels = labels.type_as(ref)
+            #     loss, _ = self(post, None, new_ref, labels, False, 2)
+            # else:
+            #     pseudo_label = self.get_pseudo_label(logits, input_ids, ref)
+            #     loss, _ = self(post, None, ref, pseudo_label, True, 2) 
+            # self.log('s_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            # return loss
 
     def validation_step(self, batch, batch_idx):
         post, resp, input_ids, ref = batch["post"], batch["resp"], batch["input_ids"], batch["ref"]
@@ -114,6 +136,8 @@ class MInterface(pl.LightningModule):
         ref_one_hot = ref_one_hot.view(batch_size, self.candidate_num, max_len, -1).float()
         select_score = torch.einsum('bclv, bmv -> bclm', ref_one_hot, sub_info)
         select_score = torch.sum(torch.max(select_score, dim=-1)[0], dim=-1)
+        # select_score = F.softmax(select_score)
+        # pseudo_logits, pseudo_label = select_score.topk(3, dim=1)
 
         return select_score
 
