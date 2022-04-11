@@ -1,5 +1,5 @@
 # MSP
-Source code of Our Paper: 
+Source code of Our NAACL 2022 Paper: 
 
 Less is More: Learning to Refine Dialogue History for Personalized Dialogue Generation.
 
