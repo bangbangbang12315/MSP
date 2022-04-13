@@ -37,7 +37,7 @@ If you are interested in the dataset [PChatbot](https://github.com/qhjqhj00/SIGI
 
 We provide a shell script ```train.sh``` to start model training. You should modify the ```word_embeddings``` and ```pretrained_path``` to your own paths. Then, you can start training by the following command: 
 ```
-bash scripts/train_chat.sh
+bash train.sh
 ```
 
 The hyper-parameters are defined and set in the ```main.py```.
@@ -47,7 +47,7 @@ After training, the trained checkpoints are saved in ```checkpoints```.
 
 # Evaluating
 
-For calculating varities of evaluation metrics(e.g. BLEU, P-Cover...), we provide a shell script ```scripts/eval.sh```. The inferenced result and metrics result are saved in ```evaluate```. You can evaluate your model by the following command: 
+For calculating varities of evaluation metrics(e.g. BLEU, P-Cover...), we provide a shell script ```evaluate.sh```. The inferenced result and metrics result are saved in ```evaluate```. You can evaluate your model by the following command: 
 ```
 bash evaluate.sh
 ```
