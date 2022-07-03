@@ -6,9 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
-# checkpoints
+# checkpoints/
 
-# dataset
+# dataset/
 
 # Distribution / packaging
 .Python
