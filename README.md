@@ -56,7 +56,25 @@ bash evaluate.sh
 
 If our code helps you, please cite our work by:
 ```
-
+@article{DBLP:journals/corr/abs-2204-08128,
+  author    = {Hanxun Zhong and
+               Zhicheng Dou and
+               Yutao Zhu and
+               Hongjin Qian and
+               Ji{-}Rong Wen},
+  title     = {Less is More: Learning to Refine Dialogue History for Personalized
+               Dialogue Generation},
+  journal   = {CoRR},
+  volume    = {abs/2204.08128},
+  year      = {2022},
+  url       = {https://doi.org/10.48550/arXiv.2204.08128},
+  doi       = {10.48550/arXiv.2204.08128},
+  eprinttype = {arXiv},
+  eprint    = {2204.08128},
+  timestamp = {Tue, 19 Apr 2022 17:11:58 +0200},
+  biburl    = {https://dblp.org/rec/journals/corr/abs-2204-08128.bib},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
 ```
 
 # Links
