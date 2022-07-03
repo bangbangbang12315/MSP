@@ -64,12 +64,12 @@ class DialoDataset(Dataset):
         pad_ref = [self.tok.pad_token_id] * (self.max_length // 16)
         with open(data_dir, 'r') as fsrc:
             for sub in tqdm(fsrc, desc='Load Dataset'):
-                post, resp, pref, sref, tref = sub.strip().split('###')
+                post, resp, ref = sub.strip().split('###')
                 # naive:
                 sub_dict = {'post': ''.join(post.strip().split(' ')),
                             'resp': ''.join(resp.strip().split(' ')),
                             'input_ids': ''.join(post.strip().split(' ')) + '[SEP]' + ''.join(resp.strip().split(' ')),
-                            'ref': pref.split('\t') + sref.split('\t') + tref.split('\t')}
+                            'ref': ref.split('\t')}
 
                 while len(sub_dict['ref']) < self.max_candidate_num:
                     sub_dict['ref'].append(pad_ref)
